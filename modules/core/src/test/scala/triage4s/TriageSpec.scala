@@ -180,6 +180,53 @@ class TriageSpec extends AnyFunSuite:
     assert(new Triage(client).triage(input, taxonomy).isLeft)
     assert(client.calls == 1)
 
+  private class Scripted(replies: String*) extends Stub(""):
+    override def complete(c: Conversation, o: CompletionOptions): Result[Completion] =
+      val reply = replies(math.min(calls, replies.size - 1))
+      calls += 1
+      Right(Completion("test", 0L, reply, "test-model", AssistantMessage(reply)))
+
+  test("opt-in retry recovers from invalid output with the next attempt"):
+    val client = new Scripted("{}", json(valid))
+    assert(new Triage(client, maxAttempts = 2).triage(input, taxonomy).map(_.result) == Right(valid))
+    assert(client.calls == 2)
+
+  test("a valid first reply is not retried"):
+    val client = new Scripted(json(valid))
+    assert(new Triage(client, maxAttempts = 3).triage(input, taxonomy).isRight)
+    assert(client.calls == 1)
+
+  test("retries stop at maxAttempts and return the last invalid output"):
+    val fabricated =
+      json(valid.copy(evidence = valid.evidence.updated(0, Evidence("issueType", "body", "invented"))))
+    val client = new Scripted("{}", "{}", fabricated)
+    new Triage(client, maxAttempts = 3).triage(input, taxonomy) match
+      case Left(TriageError.InvalidOutput(detail)) => assert(detail.contains("Evidence"))
+      case other                                   => fail(s"expected InvalidOutput, got $other")
+    assert(client.calls == 3)
+
+  test("provider failures, invalid input and invalid taxonomy are never retried"):
+    val failing = new Stub(""):
+      override def complete(c: Conversation, o: CompletionOptions): Result[Completion] =
+        calls += 1
+        Left(org.llm4s.error.AuthenticationError("openai", "down"))
+    assert(
+      new Triage(failing, maxAttempts = 3)
+        .triage(input, taxonomy)
+        .left
+        .exists(_.isInstanceOf[TriageError.ProviderFailure])
+    )
+    assert(failing.calls == 1)
+    val client = new Stub(json(valid))
+    assert(new Triage(client, maxAttempts = 3).triage(input.copy(id = " "), taxonomy).isLeft)
+    assert(new Triage(client, maxAttempts = 3).triage(input, taxonomy.copy(version = "")).isLeft)
+    assert(client.calls == 0)
+
+  test("maxAttempts outside 1 to MaxAttempts is rejected at construction"):
+    Seq(0, -1, Triage.MaxAttempts + 1).foreach { n =>
+      intercept[IllegalArgumentException](new Triage(new Stub(json(valid)), maxAttempts = n))
+    }
+
   test("provider errors and thrown timeouts remain errors without exposing raw messages"):
     val failed = new Stub(""):
       override def complete(c: Conversation, o: CompletionOptions): Result[Completion] =

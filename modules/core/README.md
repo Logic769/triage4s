@@ -59,6 +59,12 @@ If the selected provider does not support JSON Schema, explicitly opt into JSON 
 new Triage(client, useJsonSchema = false).triage(input, taxonomy)
 ```
 
+By default each issue makes exactly one completion call, and output that fails validation is returned as `InvalidOutput`. To let a fresh sample replace an invalid one, opt into extra attempts (1 to `Triage.MaxAttempts`; only `InvalidOutput` is retried, never provider failures):
+
+```scala
+new Triage(client, maxAttempts = 2).triage(input, taxonomy)
+```
+
 Local validation is still applied in JSON mode; there is no automatic format fallback.
 
 ## Result contract

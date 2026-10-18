@@ -10,21 +10,47 @@ import org.llm4s.llmconnect.model.{
 }
 import scala.util.Try
 
-final class Triage(client: LLMClient, useJsonSchema: Boolean = true) extends Classifier:
+/** Classifies issues with an injected LLM client.
+  *
+  * @param maxAttempts
+  *   how many completion calls one issue may use. Only output that fails validation (`InvalidOutput`) is
+  *   retried, with the same request; provider failures and invalid input or taxonomy never are. The default,
+  *   1, makes exactly one call.
+  */
+final class Triage(client: LLMClient, useJsonSchema: Boolean = true, maxAttempts: Int = 1) extends Classifier:
+  require(
+    maxAttempts >= 1 && maxAttempts <= Triage.MaxAttempts,
+    s"maxAttempts must be 1 to ${Triage.MaxAttempts}."
+  )
+
   override def triage(input: TriageInput, taxonomy: Taxonomy): Either[TriageError, TriageResponse] =
     for
       _ <- Validation.validateInput(input)
       _ <- Validation.validateTaxonomy(taxonomy)
-      conversation = Conversation(
-        Seq(
-          SystemMessage(Triage.instructions(taxonomy)),
-          UserMessage(ujson.Obj("title" -> input.title, "body" -> input.body).render())
-        )
+      response <- attempt(input, taxonomy, maxAttempts)
+    yield response
+
+  private def attempt(
+      input: TriageInput,
+      taxonomy: Taxonomy,
+      remaining: Int
+  ): Either[TriageError, TriageResponse] =
+    complete(input, taxonomy) match
+      case Left(_: TriageError.InvalidOutput) if remaining > 1 => attempt(input, taxonomy, remaining - 1)
+      case outcome                                             => outcome
+
+  private def complete(input: TriageInput, taxonomy: Taxonomy): Either[TriageError, TriageResponse] =
+    val conversation = Conversation(
+      Seq(
+        SystemMessage(Triage.instructions(taxonomy)),
+        UserMessage(ujson.Obj("title" -> input.title, "body" -> input.body).render())
       )
-      format =
-        if useJsonSchema then ResponseFormat.JsonSchema(Triage.schema(taxonomy), "triage")
-        else ResponseFormat.Json
-      options = CompletionOptions(temperature = 0.0, maxTokens = Some(1200), responseFormat = Some(format))
+    )
+    val format =
+      if useJsonSchema then ResponseFormat.JsonSchema(Triage.schema(taxonomy), "triage")
+      else ResponseFormat.Json
+    val options = CompletionOptions(temperature = 0.0, maxTokens = Some(1200), responseFormat = Some(format))
+    for
       attempted <- Try(client.complete(conversation, options)).toEither.left.map(e =>
         TriageError.ProviderFailure(
           s"LLM client threw ${e.getClass.getSimpleName}; inspect provider configuration."
@@ -48,6 +74,7 @@ final class Triage(client: LLMClient, useJsonSchema: Boolean = true) extends Cla
 
 object Triage:
   val PromptVersion = "triage-v1"
+  val MaxAttempts = 5
 
   private[triage4s] def instructions(taxonomy: Taxonomy): String =
     s"""You classify a single issue using only the supplied title and body.
