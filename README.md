@@ -228,7 +228,8 @@ sbt "demo/runMain triage4s.demo.Evaluation fixtures/evaluation/expected-local.js
 ```
 
 The report includes separate type/component accuracy, exact matches, review decisions, abstentions,
-and coverage, with counts and denominators. Missing results remain in accuracy denominators and are not
+and coverage, with counts and denominators, plus `perCategory` precision and recall for every type and
+component (null where a denominator is zero). Missing results remain in accuracy and recall denominators and are not
 silently discarded or mislabeled as known provider errors. A small hackathon set is not proof of production
 reliability. Live model quality and genuine replay remain unverified until credentials, approved inputs,
 and human annotations are provided.
