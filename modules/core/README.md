@@ -59,6 +59,12 @@ If the selected provider does not support JSON Schema, explicitly opt into JSON 
 new Triage(client, useJsonSchema = false).triage(input, taxonomy)
 ```
 
+Each call uses a 1,200-token completion budget at temperature 0. A model that needs a larger budget, or a different temperature, takes `TriageSettings` (`maxTokens` 1 to 32,000, `temperature` 0 to 2; other values are rejected when the settings are built):
+
+```scala
+new Triage(client, settings = TriageSettings(maxTokens = 4000)).triage(input, taxonomy)
+```
+
 Local validation is still applied in JSON mode; there is no automatic format fallback.
 
 ## Result contract

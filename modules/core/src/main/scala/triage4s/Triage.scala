@@ -10,7 +10,30 @@ import org.llm4s.llmconnect.model.{
 }
 import scala.util.Try
 
-final class Triage(client: LLMClient, useJsonSchema: Boolean = true) extends Classifier:
+/** The completion settings one classification call uses. The defaults are the request `Triage` has always
+  * sent.
+  *
+  * @param maxTokens
+  *   the completion token budget, 1 to `TriageSettings.MaxTokensLimit`
+  * @param temperature
+  *   the sampling temperature, 0 to 2
+  */
+final case class TriageSettings(maxTokens: Int = 1200, temperature: Double = 0.0):
+  require(
+    maxTokens >= 1 && maxTokens <= TriageSettings.MaxTokensLimit,
+    s"maxTokens must be 1 to ${TriageSettings.MaxTokensLimit}."
+  )
+  require(temperature >= 0.0 && temperature <= 2.0, "temperature must be 0 to 2.")
+
+object TriageSettings:
+  val MaxTokensLimit = 32000
+  val default: TriageSettings = TriageSettings()
+
+final class Triage(
+    client: LLMClient,
+    useJsonSchema: Boolean = true,
+    settings: TriageSettings = TriageSettings.default
+) extends Classifier:
   override def triage(input: TriageInput, taxonomy: Taxonomy): Either[TriageError, TriageResponse] =
     for
       _ <- Validation.validateInput(input)
@@ -24,7 +47,11 @@ final class Triage(client: LLMClient, useJsonSchema: Boolean = true) extends Cla
       format =
         if useJsonSchema then ResponseFormat.JsonSchema(Triage.schema(taxonomy), "triage")
         else ResponseFormat.Json
-      options = CompletionOptions(temperature = 0.0, maxTokens = Some(1200), responseFormat = Some(format))
+      options = CompletionOptions(
+        temperature = settings.temperature,
+        maxTokens = Some(settings.maxTokens),
+        responseFormat = Some(format)
+      )
       attempted <- Try(client.complete(conversation, options)).toEither.left.map(e =>
         TriageError.ProviderFailure(
           s"LLM client threw ${e.getClass.getSimpleName}; inspect provider configuration."

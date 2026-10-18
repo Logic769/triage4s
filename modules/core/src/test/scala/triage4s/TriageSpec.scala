@@ -50,6 +50,36 @@ class TriageSpec extends AnyFunSuite:
     assert(options.maxTokens.contains(1200))
     assert(options.responseFormat.exists(_.isInstanceOf[ResponseFormat.JsonSchema]))
 
+  test("default settings send the same request as before"):
+    val client = new Stub(json(valid))
+    new Triage(client).triage(input, taxonomy)
+    val explicit = new Stub(json(valid))
+    new Triage(explicit, settings = TriageSettings.default).triage(input, taxonomy)
+    val options = client.seen.get._2
+    assert(options.temperature == 0.0)
+    assert(options.maxTokens.contains(1200))
+    assert(explicit.seen.get._2 == options)
+
+  test("custom settings reach the completion options"):
+    val client = new Stub(json(valid))
+    new Triage(client, settings = TriageSettings(maxTokens = 4000, temperature = 0.7)).triage(input, taxonomy)
+    val options = client.seen.get._2
+    assert(options.maxTokens.contains(4000))
+    assert(options.temperature == 0.7)
+    assert(options.responseFormat.exists(_.isInstanceOf[ResponseFormat.JsonSchema]))
+
+  test("settings accept their bounds and reject values outside them"):
+    TriageSettings(maxTokens = 1, temperature = 0.0)
+    TriageSettings(maxTokens = TriageSettings.MaxTokensLimit, temperature = 2.0)
+    Seq(
+      () => TriageSettings(maxTokens = 0),
+      () => TriageSettings(maxTokens = -5),
+      () => TriageSettings(maxTokens = TriageSettings.MaxTokensLimit + 1),
+      () => TriageSettings(temperature = -0.1),
+      () => TriageSettings(temperature = 2.01),
+      () => TriageSettings(temperature = Double.NaN)
+    ).foreach(make => intercept[IllegalArgumentException](make()))
+
   test("partial and full abstention are valid, not provider failures"):
     val partial = valid.copy(
       component = None,
