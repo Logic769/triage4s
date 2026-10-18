@@ -68,9 +68,43 @@ object Evaluation:
           "needsReview" -> metric(completed.count(_._4)),
           "abstentions" -> metric(completed.count(_._5)),
           "coverage" -> metric(completed.size),
+          "mismatches" -> mismatches(selected, byId),
+          "missing" -> ujson.Arr.from(selected.filterNot(e => byId.contains(e.id)).map(_.id).sorted),
           "note" -> "Missing results remain in all accuracy denominators. Replay contains successful responses only; missing is not necessarily a provider error."
         )
       )
+
+  /** The recorded examples that fail at least one check, sorted by ID: category IDs and decisions only, never
+    * issue text.
+    */
+  private def mismatches(selected: Vector[Expected], byId: Map[String, RecordedIssue]): ujson.Value =
+    def category(id: Option[String]): ujson.Value = id.fold[ujson.Value](ujson.Null)(ujson.Str(_))
+    def categories(ids: Vector[Option[String]]): ujson.Value = ujson.Arr.from(ids.map(category))
+    val rows = for
+      e <- selected.sortBy(_.id)
+      item <- byId.get(e.id)
+      result = item.response.result
+      failed = Vector(
+        Option.when(!e.acceptedTypes.contains(result.issueType))("issueType"),
+        Option.when(!e.acceptedComponents.contains(result.component))("component"),
+        Option.when(e.needsReview != result.needsReview)("needsReview")
+      ).flatten
+      if failed.nonEmpty
+    yield ujson.Obj(
+      "id" -> e.id,
+      "failed" -> ujson.Arr.from(failed),
+      "predicted" -> ujson.Obj(
+        "issueType" -> category(result.issueType),
+        "component" -> category(result.component),
+        "needsReview" -> result.needsReview
+      ),
+      "expected" -> ujson.Obj(
+        "acceptedTypes" -> categories(e.acceptedTypes),
+        "acceptedComponents" -> categories(e.acceptedComponents),
+        "needsReview" -> e.needsReview
+      )
+    )
+    ujson.Arr.from(rows)
 
   def main(args: Array[String]): Unit =
     val outcome = for
