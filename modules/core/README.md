@@ -59,6 +59,12 @@ If the selected provider does not support JSON Schema, explicitly opt into JSON 
 new Triage(client, useJsonSchema = false).triage(input, taxonomy)
 ```
 
+To classify many issues with one taxonomy, `triageAll` checks the taxonomy and the uniqueness of the input IDs once, then classifies each input in order. Each issue keeps its own `Either`, so one invalid issue or model reply does not stop the batch:
+
+```scala
+new Triage(client).triageAll(inputs, taxonomy) // Either[TriageError, Vector[(id, Either[TriageError, TriageResponse])]]
+```
+
 Local validation is still applied in JSON mode; there is no automatic format fallback.
 
 ## Result contract

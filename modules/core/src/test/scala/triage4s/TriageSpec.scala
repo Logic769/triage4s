@@ -50,6 +50,49 @@ class TriageSpec extends AnyFunSuite:
     assert(options.maxTokens.contains(1200))
     assert(options.responseFormat.exists(_.isInstanceOf[ResponseFormat.JsonSchema]))
 
+  test("triageAll classifies every input in order, keeping each issue's own result"):
+    val client = new Stub(json(valid))
+    val second = input.copy(id = "second")
+    val blank = input.copy(id = "blank", title = " ", body = " ")
+    val results = new Triage(client).triageAll(Seq(input, blank, second), taxonomy).toOption.get
+    assert(results.map(_._1) == Vector("example", "blank", "second"))
+    assert(results(0)._2.map(_.result) == Right(valid))
+    assert(results(1)._2.left.exists(_.isInstanceOf[TriageError.InvalidInput]))
+    assert(results(2)._2.map(_.result) == Right(valid))
+    assert(client.calls == 2)
+
+  test("triageAll keeps going after an invalid model output"):
+    val replies = Iterator("{}", json(valid))
+    val client = new Stub(""):
+      override def complete(c: Conversation, o: CompletionOptions): Result[Completion] =
+        calls += 1
+        val reply = replies.next()
+        Right(Completion("test", 0L, reply, "test-model", AssistantMessage(reply)))
+    val results = new Triage(client).triageAll(Seq(input, input.copy(id = "second")), taxonomy).toOption.get
+    assert(results(0)._2.left.exists(_.isInstanceOf[TriageError.InvalidOutput]))
+    assert(results(1)._2.isRight)
+
+  test("triageAll fails the whole batch on an invalid taxonomy or a repeated ID, before any call"):
+    val client = new Stub(json(valid))
+    val badTaxonomy = new Triage(client).triageAll(Seq(input), taxonomy.copy(version = " "))
+    assert(badTaxonomy.left.exists(_.isInstanceOf[TriageError.InvalidTaxonomy]))
+    new Triage(client).triageAll(Seq(input, input.copy(id = "other"), input), taxonomy) match
+      case Left(TriageError.InvalidInput(detail)) => assert(detail.contains("example"))
+      case other => fail(s"expected InvalidInput naming the repeated ID, got $other")
+    assert(client.calls == 0)
+
+  test("triageAll of an empty batch is empty and makes no call"):
+    val client = new Stub(json(valid))
+    assert(new Triage(client).triageAll(Seq.empty, taxonomy) == Right(Vector.empty))
+    assert(client.calls == 0)
+
+  test("any Classifier gets triageAll through triage"):
+    val fixed = TriageResponse(valid, "fixed", None)
+    val classifier = new Classifier:
+      def triage(i: TriageInput, t: Taxonomy) = Right(fixed)
+    assert(classifier.triageAll(Seq(input), taxonomy) == Right(Vector("example" -> Right(fixed))))
+    assert(classifier.triageAll(Seq(input, input), taxonomy).isLeft)
+
   test("partial and full abstention are valid, not provider failures"):
     val partial = valid.copy(
       component = None,

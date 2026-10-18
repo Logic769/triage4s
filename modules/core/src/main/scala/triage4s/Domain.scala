@@ -31,6 +31,28 @@ enum TriageError(val message: String):
 trait Classifier:
   def triage(input: TriageInput, taxonomy: Taxonomy): Either[TriageError, TriageResponse]
 
+  /** Classifies a batch with one taxonomy. An invalid taxonomy or a repeated input ID fails the whole batch
+    * before any issue is classified; otherwise every input is classified in order and keeps its own result,
+    * so one failure does not stop the rest.
+    */
+  def triageAll(
+      inputs: Seq[TriageInput],
+      taxonomy: Taxonomy
+  ): Either[TriageError, Vector[(String, Either[TriageError, TriageResponse])]] =
+    Classifier.checkBatch(inputs, taxonomy).map(_ => inputs.toVector.map(i => i.id -> triage(i, taxonomy)))
+
+object Classifier:
+  private[triage4s] def checkBatch(inputs: Seq[TriageInput], taxonomy: Taxonomy): Either[TriageError, Unit] =
+    Validation.validateTaxonomy(taxonomy).flatMap { _ =>
+      val repeated = inputs.groupBy(_.id).collect { case (id, group) if group.size > 1 => id }.toVector.sorted
+      Either.cond(
+        repeated.isEmpty,
+        (),
+        TriageError
+          .InvalidInput(s"Input IDs must be unique within a batch; repeated: ${repeated.mkString(", ")}.")
+      )
+    }
+
 object Taxonomy:
   val copilotLens: Taxonomy = Taxonomy(
     "copilot-lens-v1",
