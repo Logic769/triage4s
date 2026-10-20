@@ -147,6 +147,31 @@ and inconsistent result fields return `Left(TriageError.InvalidOutput(...))`, no
 The demo's internal JSON endpoints use uPickle's `Option` encoding (`[]` or `[value]`); they are not a
 versioned public API.
 
+### From Java
+
+`triage4s-core` includes a Java API (`triage4s.javaapi`) with Java types only, so a Java service needs no Scala
+knowledge. No call throws: a failure is a `JResult` with a `JErrorKind` (`INVALID_INPUT`, `INVALID_TAXONOMY`,
+`INVALID_OUTPUT`, `PROVIDER_FAILURE`, `CONFIGURATION`).
+
+```java
+import triage4s.javaapi.*;
+
+// the client of an LLM4S provider section in your application.conf; add its module, e.g. llm4s-openai
+try (JTriage triage = JTriage.fromConfiguration("openai-main").get()) {
+    JResult<JTriageResponse> result = triage.triage("42", "CLI crashes", "The launcher crashes on startup.");
+    if (result.isSuccess()) {
+        JTriageResponse suggestion = result.get();
+        System.out.println(suggestion.issueType().orElse("abstained") + " / " + suggestion.component().orElse("abstained"));
+        suggestion.evidence().forEach(e -> System.out.println(e.target() + ": \"" + e.quote() + "\""));
+    } else {
+        System.err.println(result.errorKind().orElseThrow() + ": " + result.error().orElseThrow());
+    }
+}
+```
+
+`JTriage.of(client)` uses an LLM4S `LLMClient` you already have, and `JTaxonomy.builder("v1").issueType(...).component(...)`
+builds your own taxonomy.
+
 ## Limits and reliability
 
 - Up to **10 distinct selected issues**, one active run, one issue at a time.
