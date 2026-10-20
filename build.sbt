@@ -1,6 +1,8 @@
 ThisBuild / scalaVersion := "3.7.1"
 ThisBuild / organization := "io.github.triage4s"
 ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / licenses := Seq("MIT" -> url("https://opensource.org/licenses/MIT"))
+ThisBuild / homepage := Some(url("https://github.com/pavanvamsi3/triage4s"))
 
 // One LLM4S version for every LLM4S module: since 0.5.0 the library is split into modules that are released together.
 val llm4sVersion = "0.5.1"

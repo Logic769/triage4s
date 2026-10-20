@@ -1,0 +1,29 @@
+# Opens pull requests that update the build's dependencies, LLM4S first among them (#93).
+# Dependabot does not support sbt, so this runs Scala Steward as a GitHub Action.
+#
+# With only GITHUB_TOKEN, Steward's pull requests do not trigger other workflows, so CI does not run on them.
+# Set a SCALA_STEWARD_TOKEN secret (a fine-grained token with contents and pull-requests write access) to fix that.
+name: Scala Steward
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scala-steward:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: sbt/setup-sbt@v1
+      - uses: scala-steward-org/scala-steward-action@v2
+        with:
+          github-token: ${{ secrets.SCALA_STEWARD_TOKEN || github.token }}
+          repo-config: .scala-steward.conf

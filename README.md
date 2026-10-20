@@ -228,7 +228,9 @@ sbt "demo/runMain triage4s.demo.Evaluation fixtures/evaluation/expected-local.js
 ```
 
 The report includes separate type/component accuracy, exact matches, review decisions, abstentions,
-and coverage, with counts and denominators. Missing results remain in accuracy denominators and are not
+and coverage, with counts and denominators, plus `perCategory` precision and recall for every type and
+component (null where a denominator is zero). `mismatches` lists each recorded example that fails a check (IDs,
+category IDs and review decisions only, never issue text) and `missing` lists the IDs with no result. Missing results remain in accuracy and recall denominators and are not
 silently discarded or mislabeled as known provider errors. A small hackathon set is not proof of production
 reliability. Live model quality and genuine replay remain unverified until credentials, approved inputs,
 and human annotations are provided.
@@ -245,6 +247,13 @@ node --check modules/demo/src/main/resources/web/app.js
 Tests use deterministic fakes and temporary fixtures: no API keys, Docker, or external services are required.
 They cover output validation, exact input limits, abstention, no retries, sequential runs, source limits,
 snapshot/replay integrity, and evaluation denominators.
+
+### Dependency updates
+
+[Scala Steward](https://github.com/scala-steward-org/scala-steward) runs weekly (`.github/workflows/scala-steward.yml`)
+and opens a pull request for each outdated dependency. All `org.llm4s` modules are updated together in one pull request
+(`.scala-steward.conf`), so the build always uses one LLM4S version. Maintainers: set a `SCALA_STEWARD_TOKEN` secret so
+that CI runs on those pull requests.
 
 ## Maintainers
 
@@ -297,3 +306,7 @@ We meet every **Sunday at 9:00 AM London time** for Dev Hours.
 - **Open Collective:** [opencollective.com/llm4s](https://opencollective.com/llm4s). If you find LLM4S useful, even a
   $1 donation would really help support the project.
 - If your company is looking for an AI framework, please help us connect.
+
+## License
+
+Triage4s is released under the [MIT License](LICENSE), the same license as [LLM4S](https://github.com/llm4s/llm4s).
