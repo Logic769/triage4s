@@ -304,7 +304,8 @@ class TriageSpec extends AnyFunSuite:
     assert(client.callCount == 3)
 
   test("provider failures, invalid input and invalid taxonomy are never retried"):
-    val failing = ScriptedLLMClient.always(Reply.failure(org.llm4s.error.AuthenticationError("openai", "down")))
+    val failing =
+      ScriptedLLMClient.always(Reply.failure(org.llm4s.error.AuthenticationError("openai", "down")))
     assert(
       new Triage(failing, maxAttempts = 3)
         .triage(input, taxonomy)
