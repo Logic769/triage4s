@@ -56,6 +56,7 @@ Optional settings:
 | `TRIAGE_PORT` | `8080` | Loopback HTTP port, 1024-65535 |
 | `TRIAGE_MODEL` | `gpt-4o-mini` | OpenAI model; must support the requested structured-output schema |
 | `GITHUB_TOKEN` | unset | Optional authentication for public GitHub GET requests |
+| `TRIAGE_PROVIDER` | unset | An LLM4S provider section to use instead of OpenAI: `openai`, `anthropic`, `gemini` or `ollama` (see below) |
 
 On macOS with Homebrew's keg-only JDK:
 
@@ -63,6 +64,25 @@ On macOS with Homebrew's keg-only JDK:
 export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
+
+### Choosing a model provider
+
+The demo calls OpenAI by default. To use another provider, set `TRIAGE_PROVIDER` to one of the LLM4S provider
+sections in `modules/demo/src/main/resources/application.conf`, with that vendor's usual key variable:
+
+```bash
+export TRIAGE_PROVIDER=anthropic ANTHROPIC_API_KEY="your-key"   # Claude
+export TRIAGE_PROVIDER=gemini GOOGLE_API_KEY="your-key"         # Gemini
+export TRIAGE_PROVIDER=ollama                                    # a local Ollama model, no key
+sbt "demo/run"
+```
+
+Each section has a default model; `TRIAGE_MODEL` replaces it. For any other LLM4S provider - Azure OpenAI, Bedrock,
+an OpenAI-compatible server - add a section of your own in a file passed with `-Dconfig.file=...` (see the
+[LLM4S providers guide](https://github.com/llm4s/llm4s/blob/main/docs/guide/providers.md)), and add its LLM4S module
+to the demo's dependencies if it is not one of the four above. How strictly a provider follows the triage JSON
+schema varies (OpenAI enforces it; Anthropic receives it as a prompt instruction), so Triage4s's own validation
+decides what is accepted, whichever provider answered.
 
 ## Demo walkthrough
 

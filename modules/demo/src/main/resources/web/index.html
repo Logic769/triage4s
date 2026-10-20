@@ -17,7 +17,7 @@
   <main>
     <section class="page-heading" aria-labelledby="page-title">
       <div><p class="eyebrow">LESS SORTING. MORE UNDERSTANDING.</p><h1 id="page-title">A clearer first look at every issue.</h1><p class="intro">Inspect the source. Get a suggestion. Keep the decision yours.</p></div>
-      <div class="connection"><span id="provider-dot" class="dot"></span><div><strong id="provider-status">Checking configuration…</strong><span id="model-name">OpenAI · configured on the server</span></div></div>
+      <div class="connection"><span id="provider-dot" class="dot"></span><div><strong id="provider-status">Checking configuration…</strong><span id="model-name">Model · configured on the server</span></div></div>
     </section>
 
     <div id="error-banner" class="alert error" role="alert" hidden><span id="error-text"></span><button id="dismiss-error" class="icon-button" aria-label="Dismiss error">×</button></div>
@@ -35,7 +35,7 @@
         <div id="live-filters" class="filters"><label>Issue state<select id="issue-state"><option value="open">Open</option><option value="closed">Closed</option></select></label><label>Pages<select id="issue-pages"><option value="1">1 page · up to 30 entries</option><option value="2">2 pages · up to 60 entries</option><option value="3">3 pages · up to 90 entries</option></select></label></div>
         <div class="source-buttons"><button id="load-issues" class="button primary">Load issues <span aria-hidden="true">↓</span></button><button id="save-snapshot" class="button secondary" disabled>Save input snapshot</button></div>
       </div>
-      <p class="source-explanation" id="mode-description">Fetches public issues from GitHub only when you load. Pull requests are excluded. Loading does not call OpenAI.</p>
+      <p class="source-explanation" id="mode-description">Fetches public issues from GitHub only when you load. Pull requests are excluded. Loading does not call the model.</p>
       <p id="source-notice" class="source-notice" role="status" hidden></p>
       <p id="replay-capture" class="replay-capture" hidden></p>
     </section>
@@ -54,7 +54,7 @@
     </section>
 
     <section class="run-card" aria-labelledby="run-heading">
-      <div class="run-description"><p class="eyebrow">SUGGESTIONS, NOT AUTOMATION</p><h2 id="run-heading">Ready for a second perspective?</h2><p id="run-disclosure">Only the selected issue titles and bodies, alongside taxonomy rules, are sent to OpenAI. Existing labels are not classification input.</p><label id="consent-label" class="consent"><input id="consent" type="checkbox"><span>I reviewed the selected public content for sensitive information and agree to send it to OpenAI.</span></label><p id="transport-notice" class="fine-print"></p></div>
+      <div class="run-description"><p class="eyebrow">SUGGESTIONS, NOT AUTOMATION</p><h2 id="run-heading">Ready for a second perspective?</h2><p id="run-disclosure">Only the selected issue titles and bodies, alongside taxonomy rules, are sent to the configured model provider. Existing labels are not classification input.</p><label id="consent-label" class="consent"><input id="consent" type="checkbox"><span>I reviewed the selected public content for sensitive information and agree to send it to the configured model provider.</span></label><p id="transport-notice" class="fine-print"></p></div>
       <div class="run-actions"><button id="run-triage" class="button primary" disabled>Run triage <span aria-hidden="true">→</span></button><span id="run-hint" class="fine-print">Load and select up to 10 issues.</span><button id="record-run" class="text-button" hidden>Record results for replay</button></div>
       <div id="progress-region" class="progress-region" hidden><div class="progress-label"><strong id="run-status" role="status"></strong><span id="progress-text"></span></div><progress id="run-progress" value="0" max="1" aria-label="Issues processed"></progress><p id="run-notice" class="fine-print"></p><button id="resume-polling" class="text-button" hidden>Refresh run status</button></div>
     </section>

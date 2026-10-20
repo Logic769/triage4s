@@ -13,18 +13,18 @@ object Main extends cask.MainRoutes:
       error => { logger.error(error); throw new IllegalArgumentException(error) },
       identity
     )
-  private val provider = AppConfig.client(config)
+  private val provider = AppConfig.configured(config)
   provider.left.foreach(logger.warn(_))
   private val github = new GitHubSource(config.githubToken)
   private val service = new RunService(
     github.load,
     new SnapshotStore(Path.of(".")),
-    () => provider.map(client => new Triage(client)),
+    () => provider.map(p => new Triage(p.client)),
     Taxonomy.copilotLens
   )
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     service.close()
-    provider.foreach(_.close())
+    provider.foreach(_.client.close())
   }))
 
   override def host: String = "127.0.0.1"
@@ -43,7 +43,8 @@ object Main extends cask.MainRoutes:
       .build()
     Runtime.getRuntime.addShutdownHook(new Thread(() => server.stop()))
     server.start()
-    println(s"Triage4s: http://$host:$port (GitHub read-only; OpenAI configured: ${provider.isRight})")
+    val model = provider.fold(_ => "not configured", p => s"${p.provider} / ${p.model}")
+    println(s"Triage4s: http://$host:$port (GitHub read-only; model: $model)")
 
   private def json(value: ujson.Value, status: Int = 200): cask.Response[String] =
     cask.Response(
@@ -125,7 +126,8 @@ object Main extends cask.MainRoutes:
     json(
       ujson.Obj(
         "repository" -> "pavanvamsi3/copilot-lens",
-        "model" -> config.model,
+        "model" -> provider.fold(_ => config.model, _.model),
+        "provider" -> provider.fold(_ => config.providerSection.getOrElse("openai"), _.provider),
         "configured" -> provider.isRight,
         "taxonomy" -> upickle.default.writeJs(service.taxonomy),
         "limits" -> ujson.Obj("maxIssues" -> 10),

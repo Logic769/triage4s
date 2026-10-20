@@ -10,11 +10,11 @@
   const modeCopy = {
     live: {
       load: "Load issues",
-      description: "Fetches public issues from GitHub only when you load. Pull requests are excluded. Loading does not call OpenAI.",
+      description: "Fetches public issues from GitHub only when you load. Pull requests are excluded. Loading does not call the model.",
     },
     snapshot: {
       load: "Load snapshot",
-      description: "Loads saved inputs from local disk, not GitHub. Running triage still sends selected titles and bodies to OpenAI.",
+      description: "Loads saved inputs from local disk, not GitHub. Running triage still sends selected titles and bodies to the configured model provider.",
     },
     replay: {
       load: "Load recording",
@@ -97,12 +97,12 @@
     $("run-triage").disabled = !canRun();
     $("run-heading").textContent = replay ? "Revisit a recorded perspective." : "Ready for a second perspective?";
     $("run-disclosure").textContent = replay
-      ? "Recorded replay only. The backend reads saved results without GitHub or OpenAI calls. Capture metadata identifies the original recording."
-      : "Only the selected issue titles and bodies, alongside taxonomy rules, are sent to OpenAI. Existing labels are not classification input.";
+      ? "Recorded replay only. The backend reads saved results without GitHub or model calls. Capture metadata identifies the original recording."
+      : "Only the selected issue titles and bodies, alongside taxonomy rules, are sent to the configured model provider. Existing labels are not classification input.";
     $("run-hint").textContent = state.checkingRun ? "Checking for an existing run…"
       : running() ? "One issue at a time. Please keep this page open."
       : !state.loaded ? `Load and select up to ${limit()} issues.`
-      : !replay && !state.config?.configured ? "OpenAI is not configured. Replay is still available."
+      : !replay && !state.config?.configured ? "No model provider is configured. Replay is still available."
       : !state.selected.size ? `Select up to ${limit()} issues to continue.`
       : !replay && !$("consent").checked ? "Review the content and confirm consent first."
       : `${state.selected.size} selected · ${replay ? "no live model calls" : "manual action required"}`;
@@ -392,7 +392,7 @@
     if (locked() || !state.loaded || !ids.length || ids.length > limit()) return;
     const consent = state.mode === "replay" || $("consent").checked;
     if (!consent || (state.mode !== "replay" && !state.config?.configured)) {
-      showError("Review the public content and confirm consent before sending it to the configured OpenAI model.");
+      showError("Review the public content and confirm consent before sending it to the configured model.");
       return;
     }
     state.busy = true;
@@ -472,7 +472,8 @@
       const config = await api("/api/config");
       state.config = config;
       $("repository-name").textContent = config.repository;
-      $("provider-status").textContent = config.configured ? "OpenAI configured" : "OpenAI not configured";
+      const providerName = config.provider || "Model provider";
+      $("provider-status").textContent = config.configured ? `${providerName} configured` : `${providerName} not configured`;
       $("provider-dot").classList.toggle("ready", config.configured);
       $("model-name").textContent = config.model || "Set the model at the server edge";
       $("transport-notice").textContent = config.transportNotice || "";

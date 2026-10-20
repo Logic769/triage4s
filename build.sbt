@@ -32,7 +32,11 @@ lazy val demo = project.in(file("modules/demo")).dependsOn(core).settings(common
   libraryDependencies ++= Seq(
     "com.lihaoyi" %% "cask" % "0.10.2",
     // OpenAIClient (and, through llm4s-openai-compatible, OpenAIConfig) live in their own module since LLM4S 0.5.0
-    "org.llm4s" %% "llm4s-openai" % llm4sVersion
+    "org.llm4s" %% "llm4s-openai" % llm4sVersion,
+    // the other providers TRIAGE_PROVIDER can select; each is discovered from the classpath (#88)
+    "org.llm4s" %% "llm4s-anthropic" % llm4sVersion,
+    "org.llm4s" %% "llm4s-gemini" % llm4sVersion,
+    "org.llm4s" %% "llm4s-ollama" % llm4sVersion
   ),
   Compile / run / fork := true,
   Compile / run / baseDirectory := (ThisBuild / baseDirectory).value,
