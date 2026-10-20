@@ -125,6 +125,12 @@ class TriageSpec extends AnyFunSuite:
       case other => fail(s"expected InvalidInput naming the repeated ID, got $other")
     assert(client.calls == 0)
 
+  test("triageAll applies the opt-in retries to each issue"):
+    val client = new Scripted("{}", json(valid))
+    val results = new Triage(client, maxAttempts = 2).triageAll(Seq(input), taxonomy).toOption.get
+    assert(results.head._2.map(_.result) == Right(valid))
+    assert(client.calls == 2)
+
   test("triageAll of an empty batch is empty and makes no call"):
     val client = new Stub(json(valid))
     assert(new Triage(client).triageAll(Seq.empty, taxonomy) == Right(Vector.empty))
