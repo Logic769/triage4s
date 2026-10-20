@@ -1,0 +1,14 @@
+<configuration>
+  <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <encoder>
+      <pattern>%level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <!-- provider SDK exceptions may contain request data; the CLI prints its own sanitized messages -->
+  <logger name="org.llm4s.llmconnect.provider" level="OFF"/>
+  <logger name="com.openai" level="OFF"/>
+  <root level="WARN">
+    <appender-ref ref="STDERR"/>
+  </root>
+</configuration>

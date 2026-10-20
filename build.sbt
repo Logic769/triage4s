@@ -45,7 +45,23 @@ lazy val demo = project.in(file("modules/demo")).dependsOn(core).settings(common
   Compile / mainClass := Some("triage4s.demo.Main")
 )
 
-lazy val root = project.in(file(".")).aggregate(core, demo).settings(
+// `triage4s classify`: one issue from a file or GitHub, in the terminal or a script (#99)
+lazy val cli = project.in(file("modules/cli")).dependsOn(core).settings(common).settings(
+  name := "triage4s-cli",
+  publish / skip := true,
+  libraryDependencies ++= Seq(
+    "org.llm4s" %% "llm4s-openai" % llm4sVersion,
+    "org.llm4s" %% "llm4s-anthropic" % llm4sVersion,
+    "org.llm4s" %% "llm4s-gemini" % llm4sVersion,
+    "org.llm4s" %% "llm4s-ollama" % llm4sVersion,
+    "ch.qos.logback" % "logback-classic" % "1.5.34",
+    "org.llm4s" %% "llm4s-testkit" % llm4sVersion % Test
+  ),
+  Compile / run / fork := true,
+  Compile / mainClass := Some("triage4s.cli.Main")
+)
+
+lazy val root = project.in(file(".")).aggregate(core, demo, cli).settings(
   name := "triage4s",
   publish / skip := true
 )

@@ -193,6 +193,22 @@ try (JTriage triage = JTriage.fromConfiguration("openai-main").get()) {
 `JTriage.of(client)` uses an LLM4S `LLMClient` you already have, and `JTaxonomy.builder("v1").issueType(...).component(...)`
 builds your own taxonomy.
 
+## Command line
+
+`triage4s classify` suggests a type and component for one issue from the terminal or a script. It is read-only, like
+the dashboard.
+
+```bash
+sbt "cli/run classify --file issue.json"                          # {"id": "...", "title": "...", "body": "..."}
+sbt "cli/run classify --repo pavanvamsi3/copilot-lens --issue 12"  # a public GitHub issue
+sbt "cli/run classify --file issue.json --provider ollama --json"  # another LLM4S provider section; JSON output
+```
+
+`--provider` names an LLM4S provider section (`openai` by default; `anthropic`, `gemini` and `ollama` are included,
+see `modules/cli/src/main/resources/application.conf`), `--model` replaces its model, and `--taxonomy` reads a taxonomy
+from a JSON file. The exit code says what happened: **0** a suggestion was made, **2** it needs human review, **1** an
+error. Installing it as a `triage4s` command (Coursier `cs install`) follows once the artifacts are published (#96).
+
 ## Limits and reliability
 
 - Up to **10 distinct selected issues**, one active run, one issue at a time.
