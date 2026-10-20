@@ -18,7 +18,9 @@ final class AppConfig(
     val providerSection: Option[String] = None,
     /** `TRIAGE_MODEL` as set, which replaces a provider section's own model; `model` adds the OpenAI default.
       */
-    val modelOverride: Option[String] = None
+    val modelOverride: Option[String] = None,
+    /** `TRIAGE_REQUESTS_PER_MINUTE`: a local limit on provider calls, off when unset (#91). */
+    val requestsPerMinute: Option[Int] = None
 ):
   override def toString: String =
     s"AppConfig(port=$port, model=$model, provider=${providerSection.getOrElse("openai")}, credentials=[redacted])"
@@ -34,8 +36,9 @@ object AppConfig:
   val RequestTimeout = 60.seconds
 
   val TransportNotice =
-    "No application retries; the OpenAI SDK under LLM4S retries a transient failure (rate limit, 5xx, timeout) " +
-      "up to 2 times with backoff. Each attempt times out after 60s. Output capped at 1200 tokens."
+    "Transient provider failures (rate limit, 5xx, timeout) are retried up to 2 times with backoff - by the vendor SDK " +
+      "for OpenAI and Anthropic, by LLM4S for the others. After 3 failed issues in a row the provider is paused for " +
+      "30s. Each call, retries included, has 3 minutes; an OpenAI attempt 60s. Output capped at 1200 tokens."
 
   def load(environment: Map[String, String]): Either[String, AppConfig] =
     def optional(key: String) = environment.get(key).map(_.trim).filter(_.nonEmpty)
@@ -46,6 +49,13 @@ object AppConfig:
         .filter(p => p >= 1024 && p <= 65535)
         .toRight("TRIAGE_PORT must be an integer from 1024 to 65535.")
       _ <- Either.cond(model.matches("[a-zA-Z0-9._:-]{1,100}"), (), "TRIAGE_MODEL has an invalid format.")
+      rpm <- optional("TRIAGE_REQUESTS_PER_MINUTE") match
+        case None        => Right(None)
+        case Some(value) =>
+          value.toIntOption
+            .filter(n => n >= 1 && n <= 10000)
+            .map(Some(_))
+            .toRight("TRIAGE_REQUESTS_PER_MINUTE must be an integer from 1 to 10000.")
       section <- optional("TRIAGE_PROVIDER") match
         case Some(name) if !name.matches("[a-zA-Z0-9_-]{1,64}") =>
           Left("TRIAGE_PROVIDER has an invalid format.")
@@ -56,7 +66,8 @@ object AppConfig:
       optional("OPENAI_API_KEY"),
       optional("GITHUB_TOKEN"),
       section,
-      optional("TRIAGE_MODEL")
+      optional("TRIAGE_MODEL"),
+      rpm
     )
 
   /** The LLM4S provider configuration for `config`'s model and `key`: the OpenAI endpoint, with

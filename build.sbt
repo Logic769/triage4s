@@ -36,7 +36,9 @@ lazy val demo = project.in(file("modules/demo")).dependsOn(core).settings(common
     // the other providers TRIAGE_PROVIDER can select; each is discovered from the classpath (#88)
     "org.llm4s" %% "llm4s-anthropic" % llm4sVersion,
     "org.llm4s" %% "llm4s-gemini" % llm4sVersion,
-    "org.llm4s" %% "llm4s-ollama" % llm4sVersion
+    "org.llm4s" %% "llm4s-ollama" % llm4sVersion,
+    // ScriptedLLMClient, for the reliability tests
+    "org.llm4s" %% "llm4s-testkit" % llm4sVersion % Test
   ),
   Compile / run / fork := true,
   Compile / run / baseDirectory := (ThisBuild / baseDirectory).value,

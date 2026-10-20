@@ -258,6 +258,7 @@
       const usage = option(response.usage);
       const usageText = usage ? `${usage.prompt} input · ${usage.completion} output · ${usage.total} total tokens` : "Token usage unavailable";
       prediction.append(node("p", "usage", `${response.model || "Model unavailable"} · ${usageText}`));
+      if (item.attempts > 1) prediction.append(node("p", "fine-print", `Succeeded after ${item.attempts} attempts (transient provider errors were retried).`));
       content.append(prediction);
       const evidenceSection = node("section", "source-section");
       evidenceSection.append(node("h3", "", `Source-linked evidence · ${evidence.length} excerpt${evidence.length === 1 ? "" : "s"}`));

@@ -57,6 +57,7 @@ Optional settings:
 | `TRIAGE_MODEL` | `gpt-4o-mini` | OpenAI model; must support the requested structured-output schema |
 | `GITHUB_TOKEN` | unset | Optional authentication for public GitHub GET requests |
 | `TRIAGE_PROVIDER` | unset | An LLM4S provider section to use instead of OpenAI: `openai`, `anthropic`, `gemini` or `ollama` (see below) |
+| `TRIAGE_REQUESTS_PER_MINUTE` | unset | A local limit on model calls (1-10000), for a tight provider quota |
 
 On macOS with Homebrew's keg-only JDK:
 
@@ -199,11 +200,15 @@ builds your own taxonomy.
 - Up to **1,200 output tokens**; truncated/invalid JSON is an error, not automatically repaired.
 - GitHub loads **30 entries per page, at most 3 pages**. Pull requests are filtered out, so the issue
   count may be lower. The UI warns that results are capped; this is not an exhaustive repository scan.
-- No Triage4s retries. The OpenAI SDK underneath LLM4S retries a transient failure (rate limit, 5xx,
-  connection error) up to **2 times** with backoff, honouring the provider's `Retry-After`; LLM4S 0.5.1 does
-  not expose a setting to turn that off.
-- Each attempt times out after **60 seconds** (`ProviderTimeouts`, set on the demo's provider configuration).
-  This is a per-attempt limit, not a total wall-clock deadline.
+- Provider calls go through LLM4S's `ReliableClient`. A transient failure (rate limit, 5xx, connection error) is
+  retried up to **2 times** with backoff: by the vendor SDK for OpenAI and Anthropic, which already retries (so
+  LLM4S adds none there), and by LLM4S for the other providers. Authentication and validation errors are never
+  retried, and malformed model output is a validation result, not a provider error. An issue that needed more than
+  one attempt says so in its result.
+- After **3 failed calls in a row** the provider is paused for 30 seconds (a circuit breaker), so a batch stops
+  sending requests to a provider that is down; the remaining issues fail fast and can be retried after the run.
+- Each call has **3 minutes**, retries included; an OpenAI attempt times out after **60 seconds** (`ProviderTimeouts`).
+- `TRIAGE_REQUESTS_PER_MINUTE` adds a local rate limit, off by default.
 - The reusable library does not change any transport setting; configure your injected client yourself.
 - Runs are in memory and disappear on restart. Saving a snapshot or recording replaces the previous
   local `latest.json`; it is not an archive.

@@ -13,14 +13,19 @@ object Main extends cask.MainRoutes:
       error => { logger.error(error); throw new IllegalArgumentException(error) },
       identity
     )
-  private val provider = AppConfig.configured(config)
+  // resilient provider calls (#91), and a count of the attempts each issue took
+  private val (provider, attempts) =
+    AppConfig.configured(config).map(Reliability.wrap(_, config.requestsPerMinute)) match
+      case Right((p, counter)) => (Right(p), () => counter.attempts)
+      case Left(error)         => (Left(error), () => 0L)
   provider.left.foreach(logger.warn(_))
   private val github = new GitHubSource(config.githubToken)
   private val service = new RunService(
     github.load,
     new SnapshotStore(Path.of(".")),
     () => provider.map(p => new Triage(p.client)),
-    Taxonomy.copilotLens
+    Taxonomy.copilotLens,
+    attempts = attempts
   )
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     service.close()

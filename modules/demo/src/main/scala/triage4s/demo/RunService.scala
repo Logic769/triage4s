@@ -11,12 +11,15 @@ final case class RunItem(
     issue: Issue,
     status: String,
     response: Option[TriageResponse] = None,
-    error: Option[String] = None
+    error: Option[String] = None,
+    /** Provider calls the issue took, retries included, when that is known and more than one. */
+    attempts: Option[Long] = None
 ):
   def json: ujson.Value =
     val value = ujson.Obj("issue" -> writeJs(issue), "status" -> status)
     response.foreach(r => value("response") = writeJs(r))
     error.foreach(e => value("error") = e)
+    attempts.foreach(n => value("attempts") = ujson.Num(n.toDouble))
     value
 
 final case class Run(id: String, mode: String, status: String, items: Vector[RunItem], notice: String):
@@ -33,7 +36,9 @@ final class RunService(
     store: SnapshotStore,
     classifier: () => Either[String, Classifier],
     val taxonomy: Taxonomy,
-    worker: ExecutorService = Executors.newSingleThreadExecutor()
+    worker: ExecutorService = Executors.newSingleThreadExecutor(),
+    /** Provider calls made so far; the difference across one issue is how many attempts it took (#91). */
+    attempts: () => Long = () => 0L
 ) extends AutoCloseable:
   private var sourceMode = "live"
   private var loaded = Vector.empty[Issue]
@@ -149,12 +154,14 @@ final class RunService(
   private def process(id: String, issues: Vector[Issue], activeClassifier: Classifier): Unit =
     issues.zipWithIndex.foreach { case (issue, index) =>
       update(id, index, RunItem(issue, "running"))
+      val before = attempts()
       val result = Try(activeClassifier.triage(issue.input, taxonomy)).toEither.left
         .map(e => TriageError.ProviderFailure(s"Classifier failed (${e.getClass.getSimpleName})."))
         .flatMap(identity)
+      val took = Some(attempts() - before).filter(_ > 1)
       val item = result match
-        case Right(response) => RunItem(issue, statusFor(response), Some(response))
-        case Left(error)     => RunItem(issue, "error", error = Some(error.message))
+        case Right(response) => RunItem(issue, statusFor(response), Some(response), attempts = took)
+        case Left(error)     => RunItem(issue, "error", error = Some(error.message), attempts = took)
       update(id, index, item)
     }
     synchronized {

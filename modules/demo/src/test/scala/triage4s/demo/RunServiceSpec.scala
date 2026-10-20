@@ -189,3 +189,28 @@ class RunServiceSpec extends AnyFunSuite:
         assert(service.record().isLeft)
       finally service.close()
     }
+
+  test("records how many provider attempts an issue took, when it took more than one (#91)"):
+    withStore { store =>
+      val attempts = new AtomicInteger()
+      val classifier = new Classifier:
+        override def triage(input: TriageInput, tax: Taxonomy) =
+          // issue 1 needs three attempts, issue 2 one
+          attempts.addAndGet(if input.id == "1" then 3 else 1)
+          Right(response)
+      val service = new RunService(
+        (_, _) => Right(Vector(issue(1), issue(2))),
+        store,
+        () => Right(classifier),
+        taxonomy,
+        attempts = () => attempts.get.toLong
+      )
+      try
+        service.load("live", "open", 1)
+        assert(service.start(Vector("1", "2"), true).isRight)
+        awaitCompleted(service)
+        val items = service.currentRun("items").arr
+        assert(items(0)("attempts").num == 3)
+        assert(!items(1).obj.contains("attempts"))
+      finally service.close()
+    }
