@@ -45,3 +45,128 @@ class EvaluationSpec extends AnyFunSuite:
     assert(Evaluation.score(replay, Vector(expected.copy(inputHash = "wrong")), "heldout").isLeft)
     assert(Evaluation.score(replay, Vector(expected), "development").isLeft)
     assert(Evaluation.score(replay, Vector(expected, expected), "heldout").isLeft)
+
+  test("reports precision and recall for every category, with null for an empty denominator"):
+    def recorded(id: String, issueType: Option[String], component: String) =
+      val in = TriageInput(id, "CLI", "Unclear request")
+      val result = TriageResult(
+        issueType,
+        Some(component),
+        "Recorded for scoring.",
+        Vector(Evidence("component", "title", "CLI")) ++ issueType.map(_ =>
+          Evidence("issueType", "title", "CLI")
+        ),
+        issueType.isEmpty,
+        if issueType.isEmpty then Vector("Type unclear.") else Vector.empty
+      )
+      val is = Issue(
+        in,
+        s"https://github.com/pavanvamsi3/copilot-lens/issues/$id",
+        "open",
+        Vector.empty,
+        Instant.now().toString,
+        Issue.hashInput(in)
+      )
+      RecordedIssue(is, TriageResponse(result, "test-only", None))
+    val items = Vector(
+      recorded("a", Some("bug"), "cli"),
+      recorded("b", Some("bug"), "storage"),
+      recorded("c", None, "parsing")
+    )
+    val hashOf = items.map(i => i.issue.input.id -> i.issue.hash).toMap
+    def annotation(id: String, types: Vector[Option[String]], components: Vector[Option[String]]) =
+      Expected(id, hashOf.getOrElse(id, "missing"), types, components, false, "heldout", "test reviewer")
+    val annotations = Vector(
+      annotation("a", Vector(Some("bug")), Vector(Some("cli"))),
+      annotation("b", Vector(Some("enhancement")), Vector(Some("storage"), Some("analytics"))),
+      annotation("c", Vector(Some("question"), None), Vector(Some("parsing"))),
+      annotation("d", Vector(Some("bug")), Vector(Some("cli")))
+    )
+    val report = Evaluation.score(replay.copy(items = items), annotations, "heldout").toOption.get
+    val types = report("perCategory")("types")
+    val components = report("perCategory")("components")
+    def check(
+        v: ujson.Value,
+        predicted: Int,
+        correct: Int,
+        annotated: Int,
+        precision: Option[Double],
+        recall: Option[Double]
+    ) =
+      assert(
+        v("predicted").num == predicted && v("correct").num == correct && v("annotated").num == annotated,
+        v
+      )
+      assert(precision.fold(v("precision").isNull)(p => v("precision").num == p), v)
+      assert(recall.fold(v("recall").isNull)(r => v("recall").num == r), v)
+    assert(types.obj.keySet == Taxonomy.copilotLens.types.map(_.id).toSet)
+    assert(components.obj.keySet == Taxonomy.copilotLens.components.map(_.id).toSet)
+    check(types("bug"), 2, 1, 2, Some(0.5), Some(0.5))
+    check(types("enhancement"), 0, 0, 1, None, Some(0.0))
+    check(types("question"), 0, 0, 1, None, Some(0.0))
+    check(types("documentation"), 0, 0, 0, None, None)
+    check(components("cli"), 1, 1, 2, Some(1.0), Some(0.5))
+    check(components("storage"), 1, 1, 1, Some(1.0), Some(1.0))
+    check(components("analytics"), 0, 0, 1, None, Some(0.0))
+    check(components("parsing"), 1, 1, 1, Some(1.0), Some(1.0))
+    assert(report("expected").num == 4 && report("missingResults").num == 1)
+
+  test("lists each mismatched example by ID, and missing results separately"):
+    def recorded(id: String, issueType: Option[String], component: String, review: Boolean) =
+      val in = TriageInput(id, "CLI", "Unclear request")
+      val result = TriageResult(
+        issueType,
+        Some(component),
+        "Recorded for scoring.",
+        Vector(Evidence("component", "title", "CLI")) ++ issueType.map(_ =>
+          Evidence("issueType", "title", "CLI")
+        ),
+        review,
+        if review then Vector("Check.") else Vector.empty
+      )
+      val is = Issue(
+        in,
+        s"https://github.com/pavanvamsi3/copilot-lens/issues/$id",
+        "open",
+        Vector.empty,
+        Instant.now().toString,
+        Issue.hashInput(in)
+      )
+      RecordedIssue(is, TriageResponse(result, "test-only", None))
+    val items = Vector(
+      recorded("ok", Some("bug"), "cli", false),
+      recorded("type", Some("bug"), "cli", false),
+      recorded("component", Some("bug"), "storage", false),
+      recorded("review", Some("bug"), "cli", true)
+    )
+    val hashOf = items.map(i => i.issue.input.id -> i.issue.hash).toMap
+    def annotation(id: String, types: Vector[Option[String]]) =
+      Expected(
+        id,
+        hashOf.getOrElse(id, "missing"),
+        types,
+        Vector(Some("cli")),
+        false,
+        "heldout",
+        "test reviewer"
+      )
+    val annotations = Vector(
+      annotation("review", Vector(Some("bug"))),
+      annotation("type", Vector(Some("enhancement"), None)),
+      annotation("ok", Vector(Some("bug"))),
+      annotation("component", Vector(Some("bug"))),
+      annotation("gone", Vector(Some("bug")))
+    )
+    val report = Evaluation.score(replay.copy(items = items), annotations, "heldout").toOption.get
+    val mismatches = report("mismatches").arr
+    assert(mismatches.map(_("id").str) == Seq("component", "review", "type"))
+    assert(
+      mismatches
+        .map(_("failed").arr.map(_.str).toSeq) == Seq(Seq("component"), Seq("needsReview"), Seq("issueType"))
+    )
+    val typeRow = mismatches.find(_("id").str == "type").get
+    assert(typeRow("predicted")("issueType").str == "bug")
+    assert(typeRow("expected")("acceptedTypes").arr.toSeq == Seq(ujson.Str("enhancement"), ujson.Null))
+    assert(typeRow("expected")("needsReview").bool == false)
+    assert(report("missing").arr.map(_.str) == Seq("gone"))
+    assert(!report.render().contains("Unclear request"))
