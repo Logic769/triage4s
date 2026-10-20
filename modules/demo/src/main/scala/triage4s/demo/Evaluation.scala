@@ -1,7 +1,7 @@
 package triage4s.demo
 
 import java.nio.file.{Files, Path}
-import triage4s.Taxonomy
+import triage4s.{Taxonomy, TriageResult}
 import scala.util.Try
 import upickle.default.*
 
@@ -68,11 +68,57 @@ object Evaluation:
           "needsReview" -> metric(completed.count(_._4)),
           "abstentions" -> metric(completed.count(_._5)),
           "coverage" -> metric(completed.size),
+          "perCategory" -> ujson.Obj(
+            "types" -> perCategory(
+              replay.taxonomy.types.map(_.id),
+              selected,
+              byId,
+              _.acceptedTypes,
+              _.issueType
+            ),
+            "components" -> perCategory(
+              replay.taxonomy.components.map(_.id),
+              selected,
+              byId,
+              _.acceptedComponents,
+              _.component
+            )
+          ),
           "mismatches" -> mismatches(selected, byId),
           "missing" -> ujson.Arr.from(selected.filterNot(e => byId.contains(e.id)).map(_.id).sorted),
           "note" -> "Missing results remain in all accuracy denominators. Replay contains successful responses only; missing is not necessarily a provider error."
         )
       )
+
+  /** Precision and recall for each category of one taxonomy group.
+    *
+    * A prediction of a category is correct when the annotation accepts it. Precision divides the correct
+    * predictions by all predictions of the category; recall divides them by the annotated examples that
+    * accept the category, missing results included. Abstentions predict no category. A ratio with a zero
+    * denominator is null.
+    */
+  private def perCategory(
+      ids: Vector[String],
+      selected: Vector[Expected],
+      byId: Map[String, RecordedIssue],
+      accepted: Expected => Vector[Option[String]],
+      predicted: TriageResult => Option[String]
+  ): ujson.Value =
+    def ratio(count: Int, total: Int): ujson.Value =
+      if total == 0 then ujson.Null else ujson.Num(count.toDouble / total)
+    val pairs = selected.map(e => e -> byId.get(e.id).map(item => predicted(item.response.result)))
+    ujson.Obj.from(ids.map { id =>
+      val predictions = pairs.count(_._2.flatten.contains(id))
+      val correct = pairs.count((e, p) => p.flatten.contains(id) && accepted(e).contains(Some(id)))
+      val annotated = pairs.count((e, _) => accepted(e).contains(Some(id)))
+      id -> ujson.Obj(
+        "predicted" -> predictions,
+        "correct" -> correct,
+        "annotated" -> annotated,
+        "precision" -> ratio(correct, predictions),
+        "recall" -> ratio(correct, annotated)
+      )
+    })
 
   /** The recorded examples that fail at least one check, sorted by ID: category IDs and decisions only, never
     * issue text.

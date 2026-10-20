@@ -1,6 +1,6 @@
 # Triage4s
 
-A small Scala library for evidence-backed AI triage, with a local dashboard for real GitHub issues.
+A Scala library for evidence-backed AI triage, with a local dashboard for real GitHub issues.
 
 **LLM4S connects to the model. Triage4s defines the triage rules and validates the answer.**
 The demo uses public issues from [pavanvamsi3/copilot-lens](https://github.com/pavanvamsi3/copilot-lens)
@@ -228,8 +228,9 @@ sbt "demo/runMain triage4s.demo.Evaluation fixtures/evaluation/expected-local.js
 ```
 
 The report includes separate type/component accuracy, exact matches, review decisions, abstentions,
-and coverage, with counts and denominators. `mismatches` lists each recorded example that fails a check (IDs,
-category IDs and review decisions only, never issue text) and `missing` lists the IDs with no result. Missing results remain in accuracy denominators and are not
+and coverage, with counts and denominators, plus `perCategory` precision and recall for every type and
+component (null where a denominator is zero). `mismatches` lists each recorded example that fails a check (IDs,
+category IDs and review decisions only, never issue text) and `missing` lists the IDs with no result. Missing results remain in accuracy and recall denominators and are not
 silently discarded or mislabeled as known provider errors. A small hackathon set is not proof of production
 reliability. Live model quality and genuine replay remain unverified until credentials, approved inputs,
 and human annotations are provided.
