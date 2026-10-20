@@ -8,6 +8,20 @@ import org.scalatest.funsuite.AnyFunSuite
 class TriageSpec extends AnyFunSuite:
   private val input = TriageInput("example", "CLI crashes", "The command-line launcher crashes on startup.")
   private val taxonomy = Taxonomy.copilotLens
+
+  private def cats(n: Int): Vector[Category] =
+    Vector.tabulate(n)(i => Category(s"cat-$i", s"Category $i"))
+
+  private val small = Taxonomy(version = "v1", types = cats(1), components = cats(1))
+
+  private def withDescription(d: String): Taxonomy =
+    small.copy(types = Vector(Category("bug", d)))
+
+  private def accepted(t: Taxonomy): Boolean =
+    Validation.validateTaxonomy(t).isRight
+
+  private def rejectedAsInvalidTaxonomy(t: Taxonomy): Boolean =
+    Validation.validateTaxonomy(t).left.toOption.exists(_.isInstanceOf[TriageError.InvalidTaxonomy])
   private val valid = TriageResult(
     Some("bug"),
     Some("cli"),
@@ -205,10 +219,79 @@ class TriageSpec extends AnyFunSuite:
     assert(new Triage(client).triage(input, duplicate).isLeft)
     assert(client.calls == 0)
 
+  test("taxonomy groups accept 30 categories and reject 31, for types and components"):
+    assert(accepted(small.copy(types = cats(30))))
+    assert(rejectedAsInvalidTaxonomy(small.copy(types = cats(31))))
+    assert(accepted(small.copy(components = cats(30))))
+    assert(rejectedAsInvalidTaxonomy(small.copy(components = cats(31))))
+
+  test("category descriptions accept 500 non-blank characters and reject 501"):
+    assert(accepted(withDescription("x" * 500)))
+    assert(rejectedAsInvalidTaxonomy(withDescription("x" * 501)))
+
+  test("empty groups, a blank version and a whitespace-only description are rejected"):
+    assert(rejectedAsInvalidTaxonomy(small.copy(types = Vector.empty)))
+    assert(rejectedAsInvalidTaxonomy(small.copy(components = Vector.empty)))
+    assert(rejectedAsInvalidTaxonomy(small.copy(version = "   ")))
+    assert(rejectedAsInvalidTaxonomy(withDescription("   ")))
+
+  test("an oversized taxonomy returns InvalidTaxonomy through triage without calling the client"):
+    val client = new Stub(json(valid))
+    val outcome = new Triage(client).triage(input, small.copy(types = cats(31)))
+    assert(outcome.left.toOption.exists(_.isInstanceOf[TriageError.InvalidTaxonomy]))
+    assert(client.calls == 0)
+
   test("malformed response is not automatically retried"):
     val client = new Stub("{}")
     assert(new Triage(client).triage(input, taxonomy).isLeft)
     assert(client.calls == 1)
+
+  private class Scripted(replies: String*) extends Stub(""):
+    override def complete(c: Conversation, o: CompletionOptions): Result[Completion] =
+      val reply = replies(math.min(calls, replies.size - 1))
+      calls += 1
+      Right(Completion("test", 0L, reply, "test-model", AssistantMessage(reply)))
+
+  test("opt-in retry recovers from invalid output with the next attempt"):
+    val client = new Scripted("{}", json(valid))
+    assert(new Triage(client, maxAttempts = 2).triage(input, taxonomy).map(_.result) == Right(valid))
+    assert(client.calls == 2)
+
+  test("a valid first reply is not retried"):
+    val client = new Scripted(json(valid))
+    assert(new Triage(client, maxAttempts = 3).triage(input, taxonomy).isRight)
+    assert(client.calls == 1)
+
+  test("retries stop at maxAttempts and return the last invalid output"):
+    val fabricated =
+      json(valid.copy(evidence = valid.evidence.updated(0, Evidence("issueType", "body", "invented"))))
+    val client = new Scripted("{}", "{}", fabricated)
+    new Triage(client, maxAttempts = 3).triage(input, taxonomy) match
+      case Left(TriageError.InvalidOutput(detail)) => assert(detail.contains("Evidence"))
+      case other                                   => fail(s"expected InvalidOutput, got $other")
+    assert(client.calls == 3)
+
+  test("provider failures, invalid input and invalid taxonomy are never retried"):
+    val failing = new Stub(""):
+      override def complete(c: Conversation, o: CompletionOptions): Result[Completion] =
+        calls += 1
+        Left(org.llm4s.error.AuthenticationError("openai", "down"))
+    assert(
+      new Triage(failing, maxAttempts = 3)
+        .triage(input, taxonomy)
+        .left
+        .exists(_.isInstanceOf[TriageError.ProviderFailure])
+    )
+    assert(failing.calls == 1)
+    val client = new Stub(json(valid))
+    assert(new Triage(client, maxAttempts = 3).triage(input.copy(id = " "), taxonomy).isLeft)
+    assert(new Triage(client, maxAttempts = 3).triage(input, taxonomy.copy(version = "")).isLeft)
+    assert(client.calls == 0)
+
+  test("maxAttempts outside 1 to MaxAttempts is rejected at construction"):
+    Seq(0, -1, Triage.MaxAttempts + 1).foreach { n =>
+      intercept[IllegalArgumentException](new Triage(new Stub(json(valid)), maxAttempts = n))
+    }
 
   test("provider errors and thrown timeouts remain errors without exposing raw messages"):
     val failed = new Stub(""):

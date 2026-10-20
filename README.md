@@ -1,6 +1,6 @@
 # Triage4s
 
-A small Scala library for evidence-backed AI triage, with a local dashboard for real GitHub issues.
+A Scala library for evidence-backed AI triage, with a local dashboard for real GitHub issues.
 
 **LLM4S connects to the model. Triage4s defines the triage rules and validates the answer.**
 The demo uses public issues from [pavanvamsi3/copilot-lens](https://github.com/pavanvamsi3/copilot-lens)
