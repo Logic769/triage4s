@@ -59,6 +59,18 @@ If the selected provider does not support JSON Schema, explicitly opt into JSON 
 new Triage(client, useJsonSchema = false).triage(input, taxonomy)
 ```
 
+By default each issue makes exactly one completion call, and output that fails validation is returned as `InvalidOutput`. To let a fresh sample replace an invalid one, opt into extra attempts (1 to `Triage.MaxAttempts`; only `InvalidOutput` is retried, never provider failures):
+
+```scala
+new Triage(client, maxAttempts = 2).triage(input, taxonomy)
+```
+
+Each call uses a 1,200-token completion budget at temperature 0. A model that needs a larger budget, or a different temperature, takes `TriageSettings` (`maxTokens` 1 to 32,000, `temperature` 0 to 2; other values are rejected when the settings are built):
+
+```scala
+new Triage(client, settings = TriageSettings(maxTokens = 4000)).triage(input, taxonomy)
+```
+
 To classify many issues with one taxonomy, `triageAll` checks the taxonomy and the uniqueness of the input IDs once, then classifies each input in order. Each issue keeps its own `Either`, so one invalid issue or model reply does not stop the batch:
 
 ```scala
