@@ -297,3 +297,7 @@ We meet every **Sunday at 9:00 AM London time** for Dev Hours.
 - **Open Collective:** [opencollective.com/llm4s](https://opencollective.com/llm4s). If you find LLM4S useful, even a
   $1 donation would really help support the project.
 - If your company is looking for an AI framework, please help us connect.
+
+## License
+
+Triage4s is released under the [MIT License](LICENSE), the same license as [LLM4S](https://github.com/llm4s/llm4s).

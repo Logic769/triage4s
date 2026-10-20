@@ -1,6 +1,8 @@
 ThisBuild / scalaVersion := "3.7.1"
 ThisBuild / organization := "io.github.triage4s"
 ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / licenses := Seq("MIT" -> url("https://opensource.org/licenses/MIT"))
+ThisBuild / homepage := Some(url("https://github.com/pavanvamsi3/triage4s"))
 
 lazy val common = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
