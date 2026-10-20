@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
+# The expected Markdown contains backticks, meant literally.
+# shellcheck disable=SC2016
 # Tests action/summary.sh against two fixtures: a suggestion with evidence, and a full abstention needing review.
 set -euo pipefail
-# the expected Markdown contains backticks, meant literally
-# shellcheck disable=SC2016
 here="$(cd "$(dirname "$0")" && pwd)"
 fail=0
 expect() { grep -qF -- "$2" <<<"$1" || { echo "FAIL: missing: $2"; fail=1; }; }
