@@ -2,7 +2,12 @@
 # Renders the JSON of `triage4s classify --json` as the Markdown the GitHub Action writes to the job summary and, in
 # comment mode, to the issue (#100). Usage: action/summary.sh RESULT.json
 set -euo pipefail
-[ $# -eq 1 ] && [ -f "$1" ] || { echo "usage: $0 RESULT.json" >&2; exit 2; }
+if [ $# -ne 1 ] || [ ! -f "$1" ]; then
+  echo "usage: $0 RESULT.json" >&2
+  exit 2
+fi
+# the program is jq, not shell: its $ and backticks are meant literally
+# shellcheck disable=SC2016
 jq -r '
   .response as $r | $r.result as $t |
   def code: "`" + . + "`";
