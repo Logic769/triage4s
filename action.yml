@@ -58,9 +58,12 @@ runs:
       working-directory: ${{ github.action_path }}
       run: |
         set -euo pipefail
-        sbt -batch cli/compile
+        sbt -batch -Dsbt.supershell=false cli/compile
         # the classpath, so the CLI runs with plain java and sbt's log lines cannot mix into its JSON
-        sbt -batch -error "export cli/Runtime/fullClasspath" | tail -n 1 | tr -d '\r' > "$RUNNER_TEMP/triage4s-classpath"
+        # no supershell or colours, escape codes stripped, and the classpath picked by content rather than position
+        sbt -batch -error -Dsbt.supershell=false -Dsbt.color=false "export cli/Runtime/fullClasspath" \
+          | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | tr -d '\r' | grep '/modules/cli/target/' | tail -n 1 \
+          > "$RUNNER_TEMP/triage4s-classpath" || true
         classes="$(tr ':' '\n' < "$RUNNER_TEMP/triage4s-classpath" | grep -m1 '/modules/cli/target/.*/classes$' || true)"
         if [ -z "$classes" ] || [ ! -f "$classes/triage4s/cli/Main.class" ]; then
           echo "::error::Could not build the Triage4s CLI: its compiled classes are not on the exported classpath."
