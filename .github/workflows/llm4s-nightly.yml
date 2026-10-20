@@ -1,0 +1,73 @@
+# Builds and tests triage4s against LLM4S main every night (#94), so a breaking change there shows up here within a
+# day - early enough to adapt, or to report it upstream before it is released.
+name: LLM4S nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  # LLM4S main is published locally under this fixed version, which triage4s then builds against.
+  LLM4S_NIGHTLY: 0.0.0-nightly-SNAPSHOT
+
+jobs:
+  against-llm4s-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out LLM4S main
+        uses: actions/checkout@v4
+        with:
+          repository: llm4s/llm4s
+          ref: main
+          path: llm4s
+          fetch-depth: 0 # LLM4S's build reads its version from git tags
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+
+      - name: Record the LLM4S commit
+        id: llm4s
+        run: echo "sha=$(git -C llm4s rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish LLM4S main locally
+        working-directory: llm4s
+        run: >
+          sbt -batch
+          'set every version := "${{ env.LLM4S_NIGHTLY }}"'
+          'set every Compile / packageDoc / publishArtifact := false'
+          publishLocal
+
+      - name: Build and test triage4s against it
+        run: sbt -batch -Dllm4s.version=${{ env.LLM4S_NIGHTLY }} test
+
+      - name: Open or update the tracking issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.llm4s.outputs.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create llm4s-nightly --color B60205 \
+            --description "Triage4s does not build or pass its tests against LLM4S main" 2>/dev/null || true
+          body="The nightly build against LLM4S main (llm4s/llm4s@${SHA}) failed: ${RUN}"
+          open=$(gh issue list --label llm4s-nightly --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "Build fails against LLM4S main" --label llm4s-nightly --body "$body
+
+          Adapt triage4s to the change, or, if it is an unintended break, report it at https://github.com/llm4s/llm4s/issues.
+          Close this issue once the nightly build passes again."
+          fi

@@ -255,6 +255,13 @@ and opens a pull request for each outdated dependency. All `org.llm4s` modules a
 (`.scala-steward.conf`), so the build always uses one LLM4S version. Maintainers: set a `SCALA_STEWARD_TOKEN` secret so
 that CI runs on those pull requests.
 
+### Building against LLM4S main
+
+A nightly workflow (`.github/workflows/llm4s-nightly.yml`) publishes LLM4S `main` locally and runs this build's tests
+against it, so a breaking change there is caught within a day. When it fails, it opens (or comments on) an issue
+labelled `llm4s-nightly`. To try it yourself, publish LLM4S locally and run
+`sbt -Dllm4s.version=<that version> test`; without the property the build uses the released LLM4S version.
+
 ## Maintainers
 
 - **Kannupriya Kalra** - [@kannupriyakalra](https://github.com/kannupriyakalra) ·
