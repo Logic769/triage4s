@@ -73,12 +73,14 @@ class AppConfigSpec extends AnyFunSuite:
     assert(!config.toString.contains(fakeApiKey))
     assert(!config.toString.contains(fakeGithubToken))
 
-  test("pinned SDK uses zero retry attempts and finite configured phase timeouts"):
-    AppConfig.configureTransport()
-    val azure = com.azure.core.util.Configuration.getGlobalConfiguration
-    assert(azure.get("AZURE_REQUEST_RETRY_COUNT") == "0")
-    assert(azure.get("AZURE_REQUEST_CONNECT_TIMEOUT") == "10000")
-    assert(azure.get("AZURE_REQUEST_RESPONSE_TIMEOUT") == "60000")
-    assert(azure.get("AZURE_REQUEST_READ_TIMEOUT") == "60000")
-    assert(azure.get("AZURE_REQUEST_WRITE_TIMEOUT") == "60000")
-    assert(new com.azure.core.http.policy.ExponentialBackoff().getMaxRetries == 0)
+  test("the OpenAI configuration targets HTTPS and bounds each attempt with the request timeout"):
+    import org.llm4s.llmconnect.config.ContextWindowResolver
+    import org.llm4s.model.ModelRegistryService
+    given ModelRegistryService = ModelRegistryService.default().toOption.get
+    given ContextWindowResolver = ContextWindowResolver(summon[ModelRegistryService])
+    val config = AppConfig.load(Map("TRIAGE_MODEL" -> "gpt-4o-mini")).toOption.get
+    val provider = AppConfig.providerConfig(config, "fake-openai-key-for-tests").toOption.get
+    assert(provider.baseUrl == "https://api.openai.com/v1")
+    assert(provider.model == "gpt-4o-mini")
+    assert(provider.timeouts.request.contains(AppConfig.RequestTimeout))
+    assert(AppConfig.TransportNotice.contains("up to 2 times"))

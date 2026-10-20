@@ -7,7 +7,7 @@
   </appender>
   <!-- The dashboard reports sanitized provider errors; SDK exceptions may contain request data. -->
   <logger name="org.llm4s.llmconnect.provider" level="OFF"/>
-  <logger name="com.azure" level="OFF"/>
+  <logger name="com.openai" level="OFF"/>
   <root level="WARN">
     <appender-ref ref="STDERR"/>
   </root>

@@ -1,9 +1,11 @@
 package triage4s.demo
 
 import org.llm4s.llmconnect.LLMClient
-import org.llm4s.llmconnect.config.{ContextWindowResolver, OpenAIConfig}
+import org.llm4s.llmconnect.config.{ContextWindowResolver, OpenAIConfig, ProviderTimeouts}
 import org.llm4s.llmconnect.provider.OpenAIClient
 import org.llm4s.model.ModelRegistryService
+import org.llm4s.types.Result
+import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
 final class AppConfig(
@@ -15,9 +17,15 @@ final class AppConfig(
   override def toString: String = s"AppConfig(port=$port, model=$model, credentials=[redacted])"
 
 object AppConfig:
+  /** The OpenAI endpoint the demo calls; always HTTPS, so the key never travels in plaintext. */
+  val OpenAIBaseUrl = "https://api.openai.com/v1"
+
+  /** How long one attempt of a classification call may take before it fails. */
+  val RequestTimeout = 60.seconds
+
   val TransportNotice =
-    "No application or SDK retries. Connect timeout 10s; response/read/write timeouts 60s. " +
-      "These are transport-phase limits, not an end-to-end deadline. Output capped at 1200 tokens."
+    "No application retries; the OpenAI SDK under LLM4S retries a transient failure (rate limit, 5xx, timeout) " +
+      "up to 2 times with backoff. Each attempt times out after 60s. Output capped at 1200 tokens."
 
   def load(environment: Map[String, String]): Either[String, AppConfig] =
     def optional(key: String) = environment.get(key).map(_.trim).filter(_.nonEmpty)
@@ -30,13 +38,13 @@ object AppConfig:
       _ <- Either.cond(model.matches("[a-zA-Z0-9._:-]{1,100}"), (), "TRIAGE_MODEL has an invalid format.")
     yield new AppConfig(parsed, model, optional("OPENAI_API_KEY"), optional("GITHUB_TOKEN"))
 
-  def configureTransport(): Unit =
-    // LLM4S 0.4.1 does not expose its Azure SDK builder; configure before SDK initialization.
-    System.setProperty("AZURE_REQUEST_RETRY_COUNT", "0")
-    System.setProperty("AZURE_REQUEST_CONNECT_TIMEOUT", "10000")
-    System.setProperty("AZURE_REQUEST_RESPONSE_TIMEOUT", "60000")
-    System.setProperty("AZURE_REQUEST_READ_TIMEOUT", "60000")
-    System.setProperty("AZURE_REQUEST_WRITE_TIMEOUT", "60000")
+  /** The LLM4S provider configuration for `config`'s model and `key`: the OpenAI endpoint, with
+    * [[RequestTimeout]].
+    */
+  def providerConfig(config: AppConfig, key: String)(using ContextWindowResolver): Result[OpenAIConfig] =
+    OpenAIConfig
+      .fromValues(config.model, key, None, OpenAIBaseUrl)
+      .map(_.withTimeouts(ProviderTimeouts(request = Some(RequestTimeout))))
 
   def client(config: AppConfig): Either[String, LLMClient] =
     for
@@ -47,8 +55,7 @@ object AppConfig:
       client <- Try {
         given ModelRegistryService = registry
         given ContextWindowResolver = ContextWindowResolver(registry)
-        val provider = OpenAIConfig.fromValues(config.model, key, None, "https://api.openai.com/v1")
-        OpenAIClient(provider)
+        providerConfig(config, key).flatMap(OpenAIClient(_))
       }.toEither.left
         .map(e => s"Could not configure OpenAI (${e.getClass.getSimpleName}).")
         .flatMap(_.left.map(_ => "LLM4S could not create the OpenAI client."))

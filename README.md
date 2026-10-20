@@ -24,8 +24,9 @@ or repository-code access. Evidence proves that a quote exists, not that the cla
 
 ## Quick start
 
-Requirements: **JDK 21** and **sbt**. The build pins Scala 3.7.1 and published LLM4S 0.4.1;
-no sibling LLM4S checkout or `publishLocal` step is needed.
+Requirements: **JDK 21** and **sbt**. The build pins Scala 3.7.1 and published LLM4S 0.5.1
+(`llm4s-core` for the library, plus `llm4s-openai` for the demo's OpenAI client); no sibling LLM4S
+checkout or `publishLocal` step is needed.
 
 ```bash
 cd /path/to/triage4s
@@ -153,16 +154,15 @@ versioned public API.
 - Up to **1,200 output tokens**; truncated/invalid JSON is an error, not automatically repaired.
 - GitHub loads **30 entries per page, at most 3 pages**. Pull requests are filtered out, so the issue
   count may be lower. The UI warns that results are capped; this is not an exhaustive repository scan.
-- No Triage4s retries. The standalone demo sets the pinned Azure SDK's retry count to zero at startup,
-  before constructing LLM4S's OpenAI client.
-- Transport timeouts: 10-second connect; 60-second response, read, and write phases.
-  These are **phase limits, not a total wall-clock deadline**.
-- Transport configuration is process-wide in the forked demo JVM because LLM4S 0.4.1 does not expose
-  the SDK builder. The reusable library does not change global settings; configure your injected client's
-  transport policy yourself.
+- No Triage4s retries. The OpenAI SDK underneath LLM4S retries a transient failure (rate limit, 5xx,
+  connection error) up to **2 times** with backoff, honouring the provider's `Retry-After`; LLM4S 0.5.1 does
+  not expose a setting to turn that off.
+- Each attempt times out after **60 seconds** (`ProviderTimeouts`, set on the demo's provider configuration).
+  This is a per-attempt limit, not a total wall-clock deadline.
+- The reusable library does not change any transport setting; configure your injected client yourself.
 - Runs are in memory and disappear on restart. Saving a snapshot or recording replaces the previous
   local `latest.json`; it is not an archive.
-- The pinned OpenAI path uses the Azure SDK underneath LLM4S. It is still calling OpenAI, not Azure-hosted models.
+- The demo calls OpenAI at `https://api.openai.com/v1` only, so the key is never sent in plaintext.
 
 ## Data, privacy, and local files
 

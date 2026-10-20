@@ -13,7 +13,6 @@ object Main extends cask.MainRoutes:
       error => { logger.error(error); throw new IllegalArgumentException(error) },
       identity
     )
-  AppConfig.configureTransport()
   private val provider = AppConfig.client(config)
   provider.left.foreach(logger.warn(_))
   private val github = new GitHubSource(config.githubToken)
