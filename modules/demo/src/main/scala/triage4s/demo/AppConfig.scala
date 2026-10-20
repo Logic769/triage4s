@@ -21,7 +21,9 @@ final class AppConfig(
     val modelOverride: Option[String] = None,
     /** `TRIAGE_REQUESTS_PER_MINUTE`: a local limit on provider calls, off when unset (#91). */
     val requestsPerMinute: Option[Int] = None,
-    /** Where the dashboard listens (`TRIAGE_BIND_ADDRESS`): loopback, or all interfaces inside a container (#101). */
+    /** Where the dashboard listens (`TRIAGE_BIND_ADDRESS`): loopback, or all interfaces inside a container
+      * (#101).
+      */
     val bindAddress: String = AppConfig.Loopback
 ):
   override def toString: String =
