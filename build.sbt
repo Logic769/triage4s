@@ -16,7 +16,11 @@ lazy val common = Seq(
 lazy val core = project.in(file("modules/core")).settings(common).settings(
   name := "triage4s-core",
   // the core library needs only LLMClient and the model types; it ships no provider client
-  libraryDependencies += "org.llm4s" %% "llm4s-core" % llm4sVersion
+  libraryDependencies ++= Seq(
+    "org.llm4s" %% "llm4s-core" % llm4sVersion,
+    // ScriptedLLMClient: a scripted model that records every request, for the tests
+    "org.llm4s" %% "llm4s-testkit" % llm4sVersion % Test
+  )
 )
 
 lazy val demo = project.in(file("modules/demo")).dependsOn(core).settings(common).settings(
