@@ -26,7 +26,9 @@ lazy val core = project.in(file("modules/core")).settings(common).settings(
   )
 )
 
-lazy val demo = project.in(file("modules/demo")).dependsOn(core).settings(common).settings(
+lazy val demo = project.in(file("modules/demo")).dependsOn(core).enablePlugins(JavaAppPackaging).settings(common).settings(
+  // `sbt demo/stage` lays the app out under target/universal/stage, with a bin/triage4s launcher (#101)
+  executableScriptName := "triage4s",
   name := "triage4s-demo",
   publish / skip := true,
   libraryDependencies ++= Seq(

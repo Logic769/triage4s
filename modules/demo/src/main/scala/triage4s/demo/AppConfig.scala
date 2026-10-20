@@ -20,7 +20,9 @@ final class AppConfig(
       */
     val modelOverride: Option[String] = None,
     /** `TRIAGE_REQUESTS_PER_MINUTE`: a local limit on provider calls, off when unset (#91). */
-    val requestsPerMinute: Option[Int] = None
+    val requestsPerMinute: Option[Int] = None,
+    /** Where the dashboard listens (`TRIAGE_BIND_ADDRESS`): loopback, or all interfaces inside a container (#101). */
+    val bindAddress: String = AppConfig.Loopback
 ):
   override def toString: String =
     s"AppConfig(port=$port, model=$model, provider=${providerSection.getOrElse("openai")}, credentials=[redacted])"
@@ -29,6 +31,11 @@ final class AppConfig(
 final case class ConfiguredProvider(client: LLMClient, provider: String, model: String)
 
 object AppConfig:
+  val Loopback = "127.0.0.1"
+
+  /** The addresses the dashboard may listen on: loopback, or every interface for a container (#101). */
+  val BindAddresses: Set[String] = Set(Loopback, "0.0.0.0")
+
   /** The OpenAI endpoint the demo calls; always HTTPS, so the key never travels in plaintext. */
   val OpenAIBaseUrl = "https://api.openai.com/v1"
 
@@ -60,6 +67,12 @@ object AppConfig:
         case Some(name) if !name.matches("[a-zA-Z0-9_-]{1,64}") =>
           Left("TRIAGE_PROVIDER has an invalid format.")
         case other => Right(other)
+      bind = optional("TRIAGE_BIND_ADDRESS").getOrElse(Loopback)
+      _ <- Either.cond(
+        BindAddresses.contains(bind),
+        (),
+        "TRIAGE_BIND_ADDRESS must be 127.0.0.1, or 0.0.0.0 inside a container."
+      )
     yield new AppConfig(
       parsed,
       model,
@@ -67,7 +80,8 @@ object AppConfig:
       optional("GITHUB_TOKEN"),
       section,
       optional("TRIAGE_MODEL"),
-      rpm
+      rpm,
+      bind
     )
 
   /** The LLM4S provider configuration for `config`'s model and `key`: the OpenAI endpoint, with

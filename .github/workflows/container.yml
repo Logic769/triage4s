@@ -1,0 +1,59 @@
+# Builds the dashboard's container image (#101) on every pull request that touches it, and publishes it to the GitHub
+# Container Registry from main and from version tags.
+name: Container image
+
+on:
+  pull_request:
+    paths: [Dockerfile, .dockerignore, build.sbt, "project/**", "modules/**", "fixtures/**", .github/workflows/container.yml]
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+      - name: Build (and push, outside pull requests)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ github.event_name == 'pull_request' && 'triage4s:pr' || steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the image (pull requests)
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run -d --name triage4s -p 127.0.0.1:8080:8080 triage4s:pr
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8080/api/config >/tmp/config.json 2>/dev/null && break
+            sleep 2
+          done
+          cat /tmp/config.json
+          grep -q '"configured":false' /tmp/config.json
+          test "$(docker exec triage4s id -u)" = "10001"
+          docker logs triage4s

@@ -32,7 +32,9 @@ object Main extends cask.MainRoutes:
     provider.foreach(_.client.close())
   }))
 
-  override def host: String = "127.0.0.1"
+  // loopback by default; 0.0.0.0 only inside a container, whose port is published to the host's loopback (#101).
+  // Either way the same-origin guard below accepts only a 127.0.0.1 or localhost Host header.
+  override def host: String = config.bindAddress
   override def port: Int = config.port
   override def debugMode: Boolean = false
 
@@ -49,7 +51,11 @@ object Main extends cask.MainRoutes:
     Runtime.getRuntime.addShutdownHook(new Thread(() => server.stop()))
     server.start()
     val model = provider.fold(_ => "not configured", p => s"${p.provider} / ${p.model}")
-    println(s"Triage4s: http://$host:$port (GitHub read-only; model: $model)")
+    if host != AppConfig.Loopback then
+      logger.warn(
+        s"Listening on all interfaces ($host). Publish the port to loopback only, e.g. docker run -p 127.0.0.1:$port:$port."
+      )
+    println(s"Triage4s: http://${AppConfig.Loopback}:$port (GitHub read-only; model: $model)")
 
   private def json(value: ujson.Value, status: Int = 200): cask.Response[String] =
     cask.Response(

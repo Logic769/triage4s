@@ -56,6 +56,7 @@ Optional settings:
 | `TRIAGE_PORT` | `8080` | Loopback HTTP port, 1024-65535 |
 | `TRIAGE_MODEL` | `gpt-4o-mini` | OpenAI model; must support the requested structured-output schema |
 | `GITHUB_TOKEN` | unset | Optional authentication for public GitHub GET requests |
+| `TRIAGE_BIND_ADDRESS` | `127.0.0.1` | Where the dashboard listens: loopback, or `0.0.0.0` inside a container |
 | `TRIAGE_PROVIDER` | unset | An LLM4S provider section to use instead of OpenAI: `openai`, `anthropic`, `gemini` or `ollama` (see below) |
 | `TRIAGE_REQUESTS_PER_MINUTE` | unset | A local limit on model calls (1-10000), for a tight provider quota |
 
@@ -84,6 +85,19 @@ an OpenAI-compatible server - add a section of your own in a file passed with `-
 to the demo's dependencies if it is not one of the four above. How strictly a provider follows the triage JSON
 schema varies (OpenAI enforces it; Anthropic receives it as a prompt instruction), so Triage4s's own validation
 decides what is accepted, whichever provider answered.
+
+### In a container
+
+```bash
+docker run --rm -e OPENAI_API_KEY -p 127.0.0.1:8080:8080 ghcr.io/pavanvamsi3/triage4s:main
+# or build it yourself: docker build -t triage4s . && docker run --rm -e OPENAI_API_KEY -p 127.0.0.1:8080:8080 triage4s
+```
+
+The image runs as a non-root user and listens on all interfaces inside the container (`TRIAGE_BIND_ADDRESS=0.0.0.0`).
+Publish the port to the host's loopback only (`-p 127.0.0.1:...`) and on the same number as `TRIAGE_PORT`: the dashboard
+accepts only requests addressed to `127.0.0.1:<port>` or `localhost:<port>`, which also guards against DNS rebinding.
+Pass keys with `-e`, never in the image. Snapshots and recordings are written under `/app/fixtures`; mount a volume there
+to keep them.
 
 ## Demo walkthrough
 

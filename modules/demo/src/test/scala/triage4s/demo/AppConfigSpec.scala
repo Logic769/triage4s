@@ -84,3 +84,16 @@ class AppConfigSpec extends AnyFunSuite:
     assert(provider.model == "gpt-4o-mini")
     assert(provider.timeouts.request.contains(AppConfig.RequestTimeout))
     assert(AppConfig.TransportNotice.contains("up to 2 times"))
+
+  test("the dashboard listens on loopback unless TRIAGE_BIND_ADDRESS says 0.0.0.0, for a container (#101)"):
+    assert(AppConfig.load(Map.empty).toOption.get.bindAddress == "127.0.0.1")
+    assert(AppConfig.load(Map("TRIAGE_BIND_ADDRESS" -> " 0.0.0.0 ")).toOption.get.bindAddress == "0.0.0.0")
+    Seq("10.0.0.5", "example.com", "::").foreach { address =>
+      assert(
+        AppConfig
+          .load(Map("TRIAGE_BIND_ADDRESS" -> address))
+          .left
+          .toOption
+          .contains("TRIAGE_BIND_ADDRESS must be 127.0.0.1, or 0.0.0.0 inside a container.")
+      )
+    }
