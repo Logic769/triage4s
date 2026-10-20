@@ -41,6 +41,9 @@ outputs:
   needs-review:
     description: true when the result needs human review.
     value: ${{ steps.triage.outputs.needs-review }}
+  error:
+    description: Why the triage failed (the CLI's first error line), empty on success.
+    value: ${{ steps.triage.outputs.error }}
 
 runs:
   using: composite
@@ -54,8 +57,17 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
+        set -euo pipefail
+        sbt -batch cli/compile
         # the classpath, so the CLI runs with plain java and sbt's log lines cannot mix into its JSON
-        sbt -batch -error "export cli/Runtime/fullClasspath" | tail -n 1 > "$RUNNER_TEMP/triage4s-classpath"
+        sbt -batch -error "export cli/Runtime/fullClasspath" | tail -n 1 | tr -d '\r' > "$RUNNER_TEMP/triage4s-classpath"
+        classes="$(tr ':' '\n' < "$RUNNER_TEMP/triage4s-classpath" | grep -m1 '/modules/cli/target/.*/classes$' || true)"
+        if [ -z "$classes" ] || [ ! -f "$classes/triage4s/cli/Main.class" ]; then
+          echo "::error::Could not build the Triage4s CLI: its compiled classes are not on the exported classpath."
+          head -c 600 "$RUNNER_TEMP/triage4s-classpath"; echo
+          exit 1
+        fi
+        echo "Triage4s CLI classpath: $(tr ':' '\n' < "$RUNNER_TEMP/triage4s-classpath" | wc -l) entries"
     - name: Triage the issue
       id: triage
       shell: bash
@@ -77,11 +89,18 @@ runs:
         [ -n "$MODEL" ] && args+=(--model "$MODEL")
         [ -n "$TAXONOMY" ] && args+=(--taxonomy "$GITHUB_WORKSPACE/$TAXONOMY")
         set +e
-        (cd "$ACTION_PATH/modules/cli" && java -cp "$(cat "$RUNNER_TEMP/triage4s-classpath")" triage4s.cli.Main "${args[@]}") > "$RUNNER_TEMP/triage4s.json"
+        (cd "$ACTION_PATH/modules/cli" && java -cp "$(cat "$RUNNER_TEMP/triage4s-classpath")" triage4s.cli.Main "${args[@]}") \
+          > "$RUNNER_TEMP/triage4s.json" 2> "$RUNNER_TEMP/triage4s.err"
         code=$?
         set -e
-        # 0 suggested and 2 needs review are results; 1 is an error, already printed by the CLI
-        [ "$code" -eq 1 ] && exit 1
+        cat "$RUNNER_TEMP/triage4s.err" >&2
+        # 0 suggested and 2 needs review are results; anything else is an error
+        if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+          error="$(grep -m1 -v '^\s*$' "$RUNNER_TEMP/triage4s.err" || echo "the CLI exited with $code")"
+          echo "error=$error" >> "$GITHUB_OUTPUT"
+          echo "::error::Triage4s: $error"
+          exit 1
+        fi
         "$ACTION_PATH/action/summary.sh" "$RUNNER_TEMP/triage4s.json" > "$RUNNER_TEMP/triage4s.md"
         cat "$RUNNER_TEMP/triage4s.md" >> "$GITHUB_STEP_SUMMARY"
         {

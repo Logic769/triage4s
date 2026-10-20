@@ -27,5 +27,11 @@ jobs:
         with:
           issue-number: "1"
           repository: pavanvamsi3/triage4s
-      - name: The action failed cleanly
-        run: test "${{ steps.run.outcome }}" = failure
+      - name: The action failed cleanly, at the missing key
+        env:
+          OUTCOME: ${{ steps.run.outcome }}
+          ERROR: ${{ steps.run.outputs.error }}
+        run: |
+          echo "outcome=$OUTCOME error=$ERROR"
+          test "$OUTCOME" = failure
+          grep -q "OPENAI_API_KEY" <<<"$ERROR"
