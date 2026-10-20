@@ -42,7 +42,7 @@ outputs:
     description: true when the result needs human review.
     value: ${{ steps.triage.outputs.needs-review }}
   error:
-    description: Why the triage failed (the CLI's first error line), empty on success.
+    description: Why the triage failed (the CLI's error message, on one line), empty on success.
     value: ${{ steps.triage.outputs.error }}
 
 runs:
@@ -99,7 +99,9 @@ runs:
         cat "$RUNNER_TEMP/triage4s.err" >&2
         # 0 suggested and 2 needs review are results; anything else is an error
         if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
-          error="$(grep -m1 -v '^\s*$' "$RUNNER_TEMP/triage4s.err" || echo "the CLI exited with $code")"
+          # the whole message on one line (a missing key's hint is on its second line), at most 500 characters
+          error="$(tr -s '\n\t ' ' ' < "$RUNNER_TEMP/triage4s.err" | cut -c1-500)"
+          [ -n "${error// /}" ] || error="the CLI exited with $code"
           echo "error=$error" >> "$GITHUB_OUTPUT"
           echo "::error::Triage4s: $error"
           exit 1
