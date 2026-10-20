@@ -1,7 +1,7 @@
 package triage4s.demo
 
 import java.nio.file.{Files, Path}
-import triage4s.Taxonomy
+import triage4s.{Taxonomy, TriageResult}
 import scala.util.Try
 import upickle.default.*
 
@@ -68,9 +68,89 @@ object Evaluation:
           "needsReview" -> metric(completed.count(_._4)),
           "abstentions" -> metric(completed.count(_._5)),
           "coverage" -> metric(completed.size),
+          "perCategory" -> ujson.Obj(
+            "types" -> perCategory(
+              replay.taxonomy.types.map(_.id),
+              selected,
+              byId,
+              _.acceptedTypes,
+              _.issueType
+            ),
+            "components" -> perCategory(
+              replay.taxonomy.components.map(_.id),
+              selected,
+              byId,
+              _.acceptedComponents,
+              _.component
+            )
+          ),
+          "mismatches" -> mismatches(selected, byId),
+          "missing" -> ujson.Arr.from(selected.filterNot(e => byId.contains(e.id)).map(_.id).sorted),
           "note" -> "Missing results remain in all accuracy denominators. Replay contains successful responses only; missing is not necessarily a provider error."
         )
       )
+
+  /** Precision and recall for each category of one taxonomy group.
+    *
+    * A prediction of a category is correct when the annotation accepts it. Precision divides the correct
+    * predictions by all predictions of the category; recall divides them by the annotated examples that
+    * accept the category, missing results included. Abstentions predict no category. A ratio with a zero
+    * denominator is null.
+    */
+  private def perCategory(
+      ids: Vector[String],
+      selected: Vector[Expected],
+      byId: Map[String, RecordedIssue],
+      accepted: Expected => Vector[Option[String]],
+      predicted: TriageResult => Option[String]
+  ): ujson.Value =
+    def ratio(count: Int, total: Int): ujson.Value =
+      if total == 0 then ujson.Null else ujson.Num(count.toDouble / total)
+    val pairs = selected.map(e => e -> byId.get(e.id).map(item => predicted(item.response.result)))
+    ujson.Obj.from(ids.map { id =>
+      val predictions = pairs.count(_._2.flatten.contains(id))
+      val correct = pairs.count((e, p) => p.flatten.contains(id) && accepted(e).contains(Some(id)))
+      val annotated = pairs.count((e, _) => accepted(e).contains(Some(id)))
+      id -> ujson.Obj(
+        "predicted" -> predictions,
+        "correct" -> correct,
+        "annotated" -> annotated,
+        "precision" -> ratio(correct, predictions),
+        "recall" -> ratio(correct, annotated)
+      )
+    })
+
+  /** The recorded examples that fail at least one check, sorted by ID: category IDs and decisions only, never
+    * issue text.
+    */
+  private def mismatches(selected: Vector[Expected], byId: Map[String, RecordedIssue]): ujson.Value =
+    def category(id: Option[String]): ujson.Value = id.fold[ujson.Value](ujson.Null)(ujson.Str(_))
+    def categories(ids: Vector[Option[String]]): ujson.Value = ujson.Arr.from(ids.map(category))
+    val rows = for
+      e <- selected.sortBy(_.id)
+      item <- byId.get(e.id)
+      result = item.response.result
+      failed = Vector(
+        Option.when(!e.acceptedTypes.contains(result.issueType))("issueType"),
+        Option.when(!e.acceptedComponents.contains(result.component))("component"),
+        Option.when(e.needsReview != result.needsReview)("needsReview")
+      ).flatten
+      if failed.nonEmpty
+    yield ujson.Obj(
+      "id" -> e.id,
+      "failed" -> ujson.Arr.from(failed),
+      "predicted" -> ujson.Obj(
+        "issueType" -> category(result.issueType),
+        "component" -> category(result.component),
+        "needsReview" -> result.needsReview
+      ),
+      "expected" -> ujson.Obj(
+        "acceptedTypes" -> categories(e.acceptedTypes),
+        "acceptedComponents" -> categories(e.acceptedComponents),
+        "needsReview" -> e.needsReview
+      )
+    )
+    ujson.Arr.from(rows)
 
   def main(args: Array[String]): Unit =
     val outcome = for
