@@ -8,6 +8,20 @@ import org.scalatest.funsuite.AnyFunSuite
 class TriageSpec extends AnyFunSuite:
   private val input = TriageInput("example", "CLI crashes", "The command-line launcher crashes on startup.")
   private val taxonomy = Taxonomy.copilotLens
+
+  private def cats(n: Int): Vector[Category] =
+    Vector.tabulate(n)(i => Category(s"cat-$i", s"Category $i"))
+
+  private val small = Taxonomy(version = "v1", types = cats(1), components = cats(1))
+
+  private def withDescription(d: String): Taxonomy =
+    small.copy(types = Vector(Category("bug", d)))
+
+  private def accepted(t: Taxonomy): Boolean =
+    Validation.validateTaxonomy(t).isRight
+
+  private def rejectedAsInvalidTaxonomy(t: Taxonomy): Boolean =
+    Validation.validateTaxonomy(t).left.toOption.exists(_.isInstanceOf[TriageError.InvalidTaxonomy])
   private val valid = TriageResult(
     Some("bug"),
     Some("cli"),
@@ -173,6 +187,28 @@ class TriageSpec extends AnyFunSuite:
     val client = new Stub(json(valid))
     val duplicate = taxonomy.copy(types = taxonomy.types ++ taxonomy.types)
     assert(new Triage(client).triage(input, duplicate).isLeft)
+    assert(client.calls == 0)
+
+  test("taxonomy groups accept 30 categories and reject 31, for types and components"):
+    assert(accepted(small.copy(types = cats(30))))
+    assert(rejectedAsInvalidTaxonomy(small.copy(types = cats(31))))
+    assert(accepted(small.copy(components = cats(30))))
+    assert(rejectedAsInvalidTaxonomy(small.copy(components = cats(31))))
+
+  test("category descriptions accept 500 non-blank characters and reject 501"):
+    assert(accepted(withDescription("x" * 500)))
+    assert(rejectedAsInvalidTaxonomy(withDescription("x" * 501)))
+
+  test("empty groups, a blank version and a whitespace-only description are rejected"):
+    assert(rejectedAsInvalidTaxonomy(small.copy(types = Vector.empty)))
+    assert(rejectedAsInvalidTaxonomy(small.copy(components = Vector.empty)))
+    assert(rejectedAsInvalidTaxonomy(small.copy(version = "   ")))
+    assert(rejectedAsInvalidTaxonomy(withDescription("   ")))
+
+  test("an oversized taxonomy returns InvalidTaxonomy through triage without calling the client"):
+    val client = new Stub(json(valid))
+    val outcome = new Triage(client).triage(input, small.copy(types = cats(31)))
+    assert(outcome.left.toOption.exists(_.isInstanceOf[TriageError.InvalidTaxonomy]))
     assert(client.calls == 0)
 
   test("malformed response is not automatically retried"):
