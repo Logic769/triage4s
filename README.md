@@ -246,6 +246,13 @@ Tests use deterministic fakes and temporary fixtures: no API keys, Docker, or ex
 They cover output validation, exact input limits, abstention, no retries, sequential runs, source limits,
 snapshot/replay integrity, and evaluation denominators.
 
+### Dependency updates
+
+[Scala Steward](https://github.com/scala-steward-org/scala-steward) runs weekly (`.github/workflows/scala-steward.yml`)
+and opens a pull request for each outdated dependency. All `org.llm4s` modules are updated together in one pull request
+(`.scala-steward.conf`), so the build always uses one LLM4S version. Maintainers: set a `SCALA_STEWARD_TOKEN` secret so
+that CI runs on those pull requests.
+
 ## Maintainers
 
 - **Kannupriya Kalra** - [@kannupriyakalra](https://github.com/kannupriyakalra) ·
